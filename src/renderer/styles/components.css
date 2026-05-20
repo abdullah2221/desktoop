@@ -1,0 +1,79 @@
+/* ERP Form elements styling */
+.erp-input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: #1c2434;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.erp-input:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  border-color: #026ca5;
+  box-shadow: 0 0 0 3px rgba(2, 108, 165, 0.15);
+}
+
+.erp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 4px;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+}
+
+.erp-btn-primary {
+  background-color: #026ca5;
+  color: #ffffff;
+  border: 1px solid #023d5e;
+}
+
+.erp-btn-primary:hover {
+  background-color: #015481;
+}
+
+.erp-btn-secondary {
+  background-color: #ffffff;
+  color: #1c2434;
+  border: 1px solid #cbd5e1;
+}
+
+.erp-btn-secondary:hover {
+  background-color: #f8fafc;
+}
+
+/* Table styles */
+.erp-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.erp-table th {
+  background-color: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.erp-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.erp-table tr:hover {
+  background-color: #f1f5f9;
+}

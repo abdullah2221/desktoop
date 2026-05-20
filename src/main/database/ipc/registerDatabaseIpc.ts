@@ -1,0 +1,41 @@
+import { registerProductHandlers } from './product.handlers';
+import { registerCustomerHandlers } from './customer.handlers';
+import { registerSaleHandlers } from './sale.handlers';
+import { registerExpenseHandlers } from './expense.handlers';
+import { registerSettingsHandlers } from './settings.handlers';
+import { registerSystemHandlers } from './system.handlers';
+import { registerSupplierHandlers } from './supplier.handlers';
+import { registerCategoryHandlers } from './category.handlers';
+import { registerUnitHandlers } from './unit.handlers';
+import { registerBrandHandlers } from './brand.handlers';
+import { registerPurchaseHandlers } from './purchase.handlers';
+import { registerStockMovementHandlers } from './stockMovement.handlers';
+import { registerSupplierPaymentHandlers } from './supplierPayment.handlers';
+import { registerAccountingHandlers } from './accounting.handlers';
+import { registerQuoteHandlers } from './quote.handlers';
+import { registerInvoiceHandlers } from './invoice.handlers';
+import { registerInvoicePaymentHandlers } from './invoicePayment.handlers';
+import { registerTaxHandlers } from './tax.handlers';
+
+export function registerDatabaseIpc() {
+  console.log('[IPC Registration] Activating secure SQLite database channels...');
+  registerProductHandlers();
+  registerCustomerHandlers();
+  registerSaleHandlers();
+  registerExpenseHandlers();
+  registerSettingsHandlers();
+  registerSystemHandlers();
+  registerSupplierHandlers();
+  registerCategoryHandlers();
+  registerUnitHandlers();
+  registerBrandHandlers();
+  registerPurchaseHandlers();
+  registerStockMovementHandlers();
+  registerSupplierPaymentHandlers();
+  registerAccountingHandlers();
+  registerQuoteHandlers();
+  registerInvoiceHandlers();
+  registerInvoicePaymentHandlers();
+  registerTaxHandlers();
+  console.log('[IPC Registration] Secure database channel binding completed successfully.');
+}

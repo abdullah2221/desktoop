@@ -1,0 +1,57 @@
+{
+  "name": "pos-inventory-erp",
+  "version": "1.0.0",
+  "description": "Offline-first POS and Inventory ERP desktop application for retail stores in Pakistan.",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev:renderer": "vite",
+    "dev:main": "tsc -p tsconfig.main.json -w",
+    "dev:electron": "cp database/bin/better_sqlite3_electron.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && wait-on http://localhost:5173 && electron .",
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\" \"npm run dev:electron\"",
+    "build:renderer": "vite build",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build": "cp database/bin/better_sqlite3_electron.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && npm run build:renderer && npm run build:main",
+    "package": "npm run build && electron-builder",
+    "test": "cp database/bin/better_sqlite3_node.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && vitest run",
+    "test:e2e": "playwright test"
+  },
+  "keywords": [
+    "pos",
+    "inventory",
+    "erp",
+    "electron",
+    "react",
+    "typescript",
+    "sqlite"
+  ],
+  "author": "Antigravity Pair Program",
+  "license": "MIT",
+  "dependencies": {
+    "@tanstack/react-table": "^8.15.0",
+    "better-sqlite3": "^11.10.0",
+    "lucide-react": "^0.363.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.51.2",
+    "react-router-dom": "^6.22.3",
+    "recharts": "^2.12.3",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^29.1.5",
+    "electron-builder": "^24.13.3",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.4.3",
+    "vite": "^5.2.2",
+    "vitest": "^3.2.4",
+    "wait-on": "^7.2.0"
+  }
+}
