@@ -28,17 +28,21 @@ function emptyAgingTotals() {
     return { current: 0, days31_60: 0, days61_90: 0, over90: 0, total: 0 };
 }
 class ReportRepository {
-    static accountBalances(dateTo, dateFrom) {
+    static accountBalances(dateTo, dateFrom, branchId, classId) {
         const db = (0, connection_1.getDatabase)();
         const dateFilter = dateFrom
             ? "WHERE je.status = 'posted' AND je.entry_date BETWEEN @dateFrom AND @dateTo"
             : "WHERE je.status = 'posted' AND je.entry_date <= @dateTo";
+        const branchFilter = branchId ? 'AND je.branch_id = @branchId' : '';
+        const classFilter = classId ? 'AND je.class_id = @classId' : '';
         return db.prepare(`
       WITH ledger AS (
         SELECT jl.account_id, SUM(jl.debit) as debit, SUM(jl.credit) as credit
         FROM journal_entry_lines jl
         JOIN journal_entries je ON je.id = jl.journal_entry_id
         ${dateFilter}
+        ${branchFilter}
+        ${classFilter}
         GROUP BY jl.account_id
       )
       SELECT
@@ -53,10 +57,10 @@ class ReportRepository {
       LEFT JOIN ledger ON ledger.account_id = a.id
       WHERE a.status = 'active'
       ORDER BY a.account_code ASC
-    `).all({ dateFrom, dateTo });
+    `).all({ dateFrom, dateTo, branchId, classId });
     }
-    static profitAndLoss({ dateFrom, dateTo }) {
-        const rows = this.accountBalances(dateTo, dateFrom).filter((row) => row.account_type === 'Income' || row.account_type === 'Expense');
+    static profitAndLoss({ dateFrom, dateTo, branchId, classId }) {
+        const rows = this.accountBalances(dateTo, dateFrom, branchId, classId).filter((row) => row.account_type === 'Income' || row.account_type === 'Expense');
         const income = rows
             .filter((row) => row.account_type === 'Income')
             .map((row) => ({ ...row, amount: signedBalance(row.account_type, 0, row.debit, row.credit) }))
@@ -70,6 +74,8 @@ class ReportRepository {
         return {
             dateFrom,
             dateTo,
+            branchId,
+            classId,
             income,
             expenses,
             totalIncome,
@@ -77,8 +83,8 @@ class ReportRepository {
             netIncome: totalIncome - totalExpenses
         };
     }
-    static balanceSheet(dateTo) {
-        const rows = this.accountBalances(dateTo).map((row) => ({
+    static balanceSheet(dateTo, branchId) {
+        const rows = this.accountBalances(dateTo, undefined, branchId).map((row) => ({
             ...row,
             balance: signedBalance(row.account_type, row.opening_balance, row.debit, row.credit)
         }));
@@ -105,6 +111,7 @@ class ReportRepository {
         const totalEquity = equity.reduce((sum, row) => sum + row.balance, 0);
         return {
             dateTo,
+            branchId,
             assets,
             liabilities,
             equity,
@@ -152,8 +159,8 @@ class ReportRepository {
             rows
         };
     }
-    static trialBalance({ dateFrom, dateTo }) {
-        const rows = this.accountBalances(dateTo, dateFrom).map((row) => {
+    static trialBalance({ dateFrom, dateTo, branchId, classId }) {
+        const rows = this.accountBalances(dateTo, dateFrom, branchId, classId).map((row) => {
             const balance = signedBalance(row.account_type, 0, row.debit, row.credit);
             const normalDebit = row.account_type === 'Asset' || row.account_type === 'Expense';
             return {
@@ -164,7 +171,7 @@ class ReportRepository {
         }).filter((row) => row.debit_balance > 0.001 || row.credit_balance > 0.001);
         const totalDebit = rows.reduce((sum, row) => sum + row.debit_balance, 0);
         const totalCredit = rows.reduce((sum, row) => sum + row.credit_balance, 0);
-        return { dateFrom, dateTo, rows, totalDebit, totalCredit, difference: totalDebit - totalCredit };
+        return { dateFrom, dateTo, branchId, classId, rows, totalDebit, totalCredit, difference: totalDebit - totalCredit };
     }
     static generalLedger({ dateFrom, dateTo }) {
         const db = (0, connection_1.getDatabase)();

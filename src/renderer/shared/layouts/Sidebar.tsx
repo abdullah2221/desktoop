@@ -13,7 +13,8 @@ import {
   FileText,
   Percent,
   Landmark,
-  ClipboardList
+  ClipboardList,
+  Building2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -41,8 +42,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'accounting', label: 'Accounting', icon: BookOpen, permission: 'accounting.journal.create' },
     { id: 'reports', label: 'Reports', icon: ClipboardList, permission: 'reports.view' },
     { id: 'users', label: 'Users & Roles', icon: Settings, permission: 'users.manage' },
+    { id: 'branches', label: 'Branches & Classes', icon: Building2, permission: 'branch.manage' },
+    { id: 'backup', label: 'Backup & Restore', icon: Database, permission: ['backup.manage', 'settings.edit'] },
     { id: 'settings', label: 'Store Settings', icon: Settings, permission: 'settings.edit' }
-  ].filter((item) => !item.permission || hasPermission(item.permission));
+  ].filter((item) => !item.permission || (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission)));
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm">

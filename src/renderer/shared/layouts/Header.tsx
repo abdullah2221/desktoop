@@ -8,11 +8,15 @@ import {
   LogOut,
   ShieldCheck
 } from 'lucide-react';
+import type { Branch } from '../types';
 
 interface HeaderProps {
   storeName?: string;
   activeUser?: { username: string; fullName?: string; email?: string; role: string; branchId?: string };
   appVersion?: string;
+  branches?: Branch[];
+  activeBranchId?: string;
+  onBranchChange?: (branchId: string) => void;
   onLogout?: () => void;
 }
 
@@ -20,6 +24,9 @@ export const Header: React.FC<HeaderProps> = ({
   storeName = 'Al-Hamd General Store',
   activeUser = { username: 'Admin User', role: 'ADMIN' },
   appVersion = '1.0.0',
+  branches = [],
+  activeBranchId = '',
+  onBranchChange,
   onLogout
 }) => {
   const [time, setTime] = useState(new Date());
@@ -48,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const displayName = activeUser.fullName || activeUser.username;
+  const activeBranch = branches.find((branch) => branch.id === activeBranchId);
   const initials = displayName
     .split(' ')
     .filter(Boolean)
@@ -62,7 +70,21 @@ export const Header: React.FC<HeaderProps> = ({
         <Building2 className="w-4 h-4 text-slate-400" />
         <div>
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block leading-none">Active Branch</span>
-          <span className="text-xs font-bold text-slate-800">{storeName}</span>
+          {branches.length > 1 ? (
+            <select
+              className="mt-1 min-w-48 rounded-[4px] border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-800 outline-none focus:border-primary-blue"
+              value={activeBranchId}
+              onChange={(event) => onBranchChange?.(event.target.value)}
+            >
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.branch_code} - {branch.branch_name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-xs font-bold text-slate-800">{activeBranch?.branch_name || storeName}</span>
+          )}
         </div>
       </div>
 

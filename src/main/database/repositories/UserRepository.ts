@@ -63,6 +63,9 @@ export class UserRepository {
   }
 
   static deactivate(id: string, actorId?: string) {
+    if (actorId && id === actorId) {
+      throw new Error('Users cannot deactivate their own account.');
+    }
     const db = getDatabase();
     const info = db.prepare("UPDATE users SET status='inactive', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
     if (info.changes > 0) AuditLogRepository.write({ action: 'USER_DEACTIVATE', user_id: actorId, details: `User ${id} deactivated` });

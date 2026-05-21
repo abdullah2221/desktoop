@@ -14,8 +14,10 @@ import { TaxSettingsPage } from '../../features/taxes/TaxSettingsPage';
 import { BankingPage } from '../../features/banking/BankingPage';
 import { ReportsPage } from '../../features/reports/ReportsPage';
 import { UsersPage } from '../../features/users/UsersPage';
+import { BackupRestorePage } from '../../features/backup/BackupRestorePage';
+import { BranchesPage } from '../../features/branches/BranchesPage';
 
-const routePermissions: Record<string, string | null> = {
+const routePermissions: Record<string, string | string[] | null> = {
   dashboard: null,
   pos: 'pos.sale.create',
   inventory: 'inventory.product.edit',
@@ -29,6 +31,8 @@ const routePermissions: Record<string, string | null> = {
   banking: 'banking.manage',
   reports: 'reports.view',
   users: 'users.manage',
+  branches: 'branch.manage',
+  backup: ['backup.manage', 'settings.edit'],
   settings: 'settings.edit'
 };
 
@@ -36,7 +40,10 @@ export const AppRoutes: React.FC = () => {
   const { activeTab } = useErp();
   const { hasPermission } = useErp();
   const requiredPermission = routePermissions[activeTab];
-  if (requiredPermission && !hasPermission(requiredPermission)) {
+  const allowed = Array.isArray(requiredPermission)
+    ? requiredPermission.some((permission) => hasPermission(permission))
+    : !requiredPermission || hasPermission(requiredPermission);
+  if (!allowed) {
     return <div className="bg-white border border-slate-200 rounded-[6px] p-8 text-sm text-slate-600">You do not have permission to access this module.</div>;
   }
 
@@ -67,6 +74,10 @@ export const AppRoutes: React.FC = () => {
       return <ReportsPage />;
     case 'users':
       return <UsersPage />;
+    case 'branches':
+      return <BranchesPage />;
+    case 'backup':
+      return <BackupRestorePage />;
     case 'settings':
       return <SettingsPage />;
     default:

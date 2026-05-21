@@ -4,6 +4,8 @@ import { TaxRepository } from './TaxRepository';
 export interface ReportDateRange {
   dateFrom: string;
   dateTo: string;
+  branchId?: string;
+  classId?: string;
 }
 
 type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense';
@@ -32,11 +34,13 @@ function emptyAgingTotals() {
 }
 
 export class ReportRepository {
-  private static accountBalances(dateTo: string, dateFrom?: string) {
+  private static accountBalances(dateTo: string, dateFrom?: string, branchId?: string, classId?: string) {
     const db = getDatabase();
     const dateFilter = dateFrom
       ? "WHERE je.status = 'posted' AND je.entry_date BETWEEN @dateFrom AND @dateTo"
       : "WHERE je.status = 'posted' AND je.entry_date <= @dateTo";
+    const branchFilter = branchId ? 'AND je.branch_id = @branchId' : '';
+    const classFilter = classId ? 'AND je.class_id = @classId' : '';
 
     return db.prepare(`
       WITH ledger AS (
@@ -44,6 +48,8 @@ export class ReportRepository {
         FROM journal_entry_lines jl
         JOIN journal_entries je ON je.id = jl.journal_entry_id
         ${dateFilter}
+        ${branchFilter}
+        ${classFilter}
         GROUP BY jl.account_id
       )
       SELECT
@@ -58,7 +64,7 @@ export class ReportRepository {
       LEFT JOIN ledger ON ledger.account_id = a.id
       WHERE a.status = 'active'
       ORDER BY a.account_code ASC
-    `).all({ dateFrom, dateTo }) as Array<{
+    `).all({ dateFrom, dateTo, branchId, classId }) as Array<{
       id: string;
       account_code: string;
       account_name: string;
@@ -69,8 +75,8 @@ export class ReportRepository {
     }>;
   }
 
-  static profitAndLoss({ dateFrom, dateTo }: ReportDateRange) {
-    const rows = this.accountBalances(dateTo, dateFrom).filter((row) => row.account_type === 'Income' || row.account_type === 'Expense');
+  static profitAndLoss({ dateFrom, dateTo, branchId, classId }: ReportDateRange) {
+    const rows = this.accountBalances(dateTo, dateFrom, branchId, classId).filter((row) => row.account_type === 'Income' || row.account_type === 'Expense');
     const income = rows
       .filter((row) => row.account_type === 'Income')
       .map((row) => ({ ...row, amount: signedBalance(row.account_type, 0, row.debit, row.credit) }))
@@ -85,6 +91,8 @@ export class ReportRepository {
     return {
       dateFrom,
       dateTo,
+      branchId,
+      classId,
       income,
       expenses,
       totalIncome,
@@ -93,8 +101,8 @@ export class ReportRepository {
     };
   }
 
-  static balanceSheet(dateTo: string) {
-    const rows = this.accountBalances(dateTo).map((row) => ({
+  static balanceSheet(dateTo: string, branchId?: string) {
+    const rows = this.accountBalances(dateTo, undefined, branchId).map((row) => ({
       ...row,
       balance: signedBalance(row.account_type, row.opening_balance, row.debit, row.credit)
     }));
@@ -122,6 +130,7 @@ export class ReportRepository {
 
     return {
       dateTo,
+      branchId,
       assets,
       liabilities,
       equity,
@@ -174,8 +183,8 @@ export class ReportRepository {
     };
   }
 
-  static trialBalance({ dateFrom, dateTo }: ReportDateRange) {
-    const rows = this.accountBalances(dateTo, dateFrom).map((row) => {
+  static trialBalance({ dateFrom, dateTo, branchId, classId }: ReportDateRange) {
+    const rows = this.accountBalances(dateTo, dateFrom, branchId, classId).map((row) => {
       const balance = signedBalance(row.account_type, 0, row.debit, row.credit);
       const normalDebit = row.account_type === 'Asset' || row.account_type === 'Expense';
       return {
@@ -187,7 +196,7 @@ export class ReportRepository {
 
     const totalDebit = rows.reduce((sum, row) => sum + row.debit_balance, 0);
     const totalCredit = rows.reduce((sum, row) => sum + row.credit_balance, 0);
-    return { dateFrom, dateTo, rows, totalDebit, totalCredit, difference: totalDebit - totalCredit };
+    return { dateFrom, dateTo, branchId, classId, rows, totalDebit, totalCredit, difference: totalDebit - totalCredit };
   }
 
   static generalLedger({ dateFrom, dateTo }: ReportDateRange) {

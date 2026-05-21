@@ -19,6 +19,9 @@ import { registerTaxHandlers } from './tax.handlers';
 import { registerBankHandlers } from './bank.handlers';
 import { registerReportHandlers } from './report.handlers';
 import { registerAuthHandlers } from './auth.handlers';
+import { registerBackupHandlers } from './backup.handlers';
+import { registerBranchHandlers } from './branch.handlers';
+import { registerClassHandlers } from './class.handlers';
 
 export function registerDatabaseIpc() {
   console.log('[IPC Registration] Activating secure SQLite database channels...');
@@ -43,5 +46,8 @@ export function registerDatabaseIpc() {
   registerTaxHandlers();
   registerBankHandlers();
   registerReportHandlers();
+  registerBackupHandlers();
+  registerBranchHandlers();
+  registerClassHandlers();
   console.log('[IPC Registration] Secure database channel binding completed successfully.');
 }

@@ -31,7 +31,7 @@ class BankAccountRepository {
             });
             if (info.changes > 0 && openingBalance > 0) {
                 JournalRepository_1.JournalRepository.createJournal({
-                    entry_no: `AUTO-CBA-OPEN-${Date.now()}`,
+                    entry_no: `AUTO-CBA-OPEN-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
                     entry_date: new Date().toISOString().split('T')[0],
                     description: `Opening balance for ${data.code}`,
                     reference_type: 'BANK_ACCOUNT_OPENING',

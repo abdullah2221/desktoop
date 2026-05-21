@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { getDatabase } from '../connection';
 import { AuditLogRepository } from './AuditLogRepository';
+import { BranchRepository } from './BranchRepository';
 
 const SESSION_DAYS = 7;
 const HASH_ITERATIONS = 120000;
@@ -35,6 +36,7 @@ export class AuthRepository {
       status: row.status,
       last_login: row.last_login,
       branch_id: row.branch_id,
+      branches: BranchRepository.getAccessibleForUser(row.id),
       permissions: row.permissions ? String(row.permissions).split(',').filter(Boolean) : []
     };
   }
@@ -118,5 +120,13 @@ export class AuthRepository {
     if (!this.hasPermission(token, permission)) {
       throw new Error(`Unauthorized: ${permission} permission is required.`);
     }
+  }
+
+  static requireBranchAccess(token: string | null | undefined, branchId: string) {
+    const user = this.getCurrentUser(token);
+    if (!user || !BranchRepository.userCanAccessBranch(user.id, branchId)) {
+      throw new Error('Unauthorized: user is not assigned to this branch.');
+    }
+    return user;
   }
 }

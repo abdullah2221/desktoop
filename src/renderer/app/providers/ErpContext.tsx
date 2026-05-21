@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, CartItem, Sale, Expense, Customer, User, Supplier, Category, Unit, Brand, Purchase, StockMovement, SupplierPayment, CreatePurchaseInput } from '../../shared/types';
+import { Product, CartItem, Sale, Expense, Customer, User, Supplier, Category, Unit, Brand, Purchase, StockMovement, SupplierPayment, CreatePurchaseInput, Branch } from '../../shared/types';
 
 interface ErpContextType {
   // State
@@ -28,6 +28,9 @@ interface ErpContextType {
   activeUser: User | null;
   isAuthenticated: boolean;
   authLoading: boolean;
+  accessibleBranches: Branch[];
+  activeBranchId: string;
+  activeBranch?: Branch;
   
   // Actions
   setActiveTab: (tab: string) => void;
@@ -44,6 +47,7 @@ interface ErpContextType {
   logout: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   refreshActiveUser: () => Promise<User | null>;
+  setActiveBranch: (branchId: string) => Promise<void>;
   
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
@@ -75,6 +79,8 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [activeUser, setActiveUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [accessibleBranches, setAccessibleBranches] = useState<Branch[]>([]);
+  const [activeBranchId, setActiveBranchId] = useState<string>(() => localStorage.getItem('erp_active_branch_id') || '');
 
   // DATABASE-BACKED APP STATE
   const [products, setProducts] = useState<Product[]>([]);
@@ -111,15 +117,37 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return Boolean(activeUser?.permissions?.includes(permission) || activeUser?.permissions?.includes('ENTERPRISE_FULL'));
   };
 
+  const syncBranchesForUser = (user: User | null) => {
+    const branches = user?.branches || [];
+    setAccessibleBranches(branches);
+    if (!user || branches.length === 0) {
+      setActiveBranchId('');
+      localStorage.removeItem('erp_active_branch_id');
+      return '';
+    }
+
+    const savedBranch = localStorage.getItem('erp_active_branch_id');
+    const defaultBranch = branches.find((branch) => branch.is_default);
+    const nextBranchId = branches.some((branch) => branch.id === savedBranch)
+      ? savedBranch as string
+      : defaultBranch?.id || user.branch_id || branches[0].id;
+    setActiveBranchId(nextBranchId);
+    localStorage.setItem('erp_active_branch_id', nextBranchId);
+    return nextBranchId;
+  };
+
   const refreshActiveUser = async () => {
     const user = await window.api.auth.getCurrentUser();
     if (user) {
       setActiveUser(user);
+      syncBranchesForUser(user);
       return user;
     }
     localStorage.removeItem('erp_session_token');
     window.api.auth.setSessionToken(null);
     setActiveUser(null);
+    setAccessibleBranches([]);
+    setActiveBranchId('');
     return null;
   };
 
@@ -128,8 +156,9 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const result = await window.api.auth.login(username, password);
       localStorage.setItem('erp_session_token', result.token);
       setActiveUser(result.user);
+      const nextBranchId = syncBranchesForUser(result.user);
       setActiveTab('dashboard');
-      await reloadData();
+      await reloadData(nextBranchId);
       return true;
     } catch (err: any) {
       notify('error', err.message || 'Login failed.');
@@ -144,14 +173,25 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('erp_session_token');
       window.api.auth.setSessionToken(null);
       setActiveUser(null);
+      setAccessibleBranches([]);
+      setActiveBranchId('');
+      localStorage.removeItem('erp_active_branch_id');
       setActiveTab('dashboard');
     }
   };
 
+  const setActiveBranch = async (branchId: string) => {
+    if (!accessibleBranches.some((branch) => branch.id === branchId)) return;
+    setActiveBranchId(branchId);
+    localStorage.setItem('erp_active_branch_id', branchId);
+    await reloadData(branchId);
+  };
+
   // Helper function to reload all database entities in sync
-  const reloadData = async () => {
+  const reloadData = async (branchOverride?: string) => {
     try {
       if (window.api) {
+        const currentBranchId = branchOverride ?? activeBranchId;
         const [dbProducts, dbSales, dbExpenses, dbCustomers, dbSuppliers, dbCategories, dbUnits, dbBrands, dbPurchases, dbSettings] = await Promise.all([
           window.api.products.getAll(),
           window.api.sales.getAll(),
@@ -166,14 +206,14 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ]);
         
         setProducts(dbProducts);
-        setSales(dbSales);
-        setExpenses(dbExpenses);
+        setSales(currentBranchId ? dbSales.filter((row: any) => !row.branch_id || row.branch_id === currentBranchId) : dbSales);
+        setExpenses(currentBranchId ? dbExpenses.filter((row: any) => !row.branch_id || row.branch_id === currentBranchId) : dbExpenses);
         setCustomers(dbCustomers);
         setSuppliers(dbSuppliers);
         setCategories(dbCategories);
         setUnits(dbUnits);
         setBrands(dbBrands);
-        setPurchases(dbPurchases);
+        setPurchases(currentBranchId ? dbPurchases.filter((row: any) => !row.branch_id || row.branch_id === currentBranchId) : dbPurchases);
 
         if (dbSettings.storeName) setStoreNameState(dbSettings.storeName);
         if (dbSettings.storePhone) setStorePhoneState(dbSettings.storePhone);
@@ -204,6 +244,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const user = await window.api.auth.getCurrentUser();
           if (user) {
             setActiveUser(user);
+            syncBranchesForUser(user);
           } else {
             localStorage.removeItem('erp_session_token');
             window.api.auth.setSessionToken(null);
@@ -219,7 +260,9 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     if (activeUser) reloadData();
-  }, [activeUser?.id]);
+  }, [activeUser?.id, activeBranchId]);
+
+  const activeBranch = accessibleBranches.find((branch) => branch.id === activeBranchId);
 
   // PERSISTENT SETTINGS MUTATORS
   const setStoreName = (name: string) => {
@@ -527,6 +570,9 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeUser,
       isAuthenticated: Boolean(activeUser),
       authLoading,
+      accessibleBranches,
+      activeBranchId,
+      activeBranch,
       
       setActiveTab,
       setPosCustomerName,
@@ -542,6 +588,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       logout,
       hasPermission,
       refreshActiveUser,
+      setActiveBranch,
       addToCart,
       removeFromCart,
       updateCartQty,

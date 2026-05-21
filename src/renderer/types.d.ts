@@ -1,4 +1,4 @@
-import type { Account, BankAccount, BankReconciliation, BankReconciliationItem, Brand, Category, Expense, Invoice, InvoicePayment, JournalEntry, MoneyTransaction, PaymentMethodAccount, Product, Purchase, Quote, Supplier, SupplierPayment, Unit } from './shared/types';
+import type { Account, BankAccount, BankReconciliation, BankReconciliationItem, Branch, Brand, Category, ClassTracking, Expense, Invoice, InvoicePayment, JournalEntry, MoneyTransaction, PaymentMethodAccount, Product, Purchase, Quote, Supplier, SupplierPayment, Unit, User } from './shared/types';
 
 export interface IElectronAPI {
   getAppVersion: () => Promise<string>;
@@ -158,10 +158,10 @@ export interface IElectronAPI {
     markItemsCleared: (reconciliationId: string, transactionIds: string[]) => Promise<boolean>;
   };
   reports: {
-    profitAndLoss: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
-    balanceSheet: (dateTo: string) => Promise<Record<string, any>>;
+    profitAndLoss: (dateFrom: string, dateTo: string, branchId?: string, classId?: string) => Promise<Record<string, any>>;
+    balanceSheet: (dateTo: string, branchId?: string) => Promise<Record<string, any>>;
     cashFlow: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
-    trialBalance: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    trialBalance: (dateFrom: string, dateTo: string, branchId?: string, classId?: string) => Promise<Record<string, any>>;
     generalLedger: (dateFrom: string, dateTo: string) => Promise<Array<Record<string, any>>>;
     arAging: (dateTo: string) => Promise<Record<string, any>>;
     apAging: (dateTo: string) => Promise<Record<string, any>>;
@@ -183,6 +183,30 @@ export interface IElectronAPI {
     getPermissions: () => Promise<Array<Record<string, any>>>;
     create: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
     update: (payload: unknown) => Promise<boolean>;
+  };
+  backup: {
+    create: () => Promise<Record<string, any>>;
+    list: () => Promise<Array<Record<string, any>>>;
+    restore: (filePath: string) => Promise<Record<string, any>>;
+    validate: (filePath: string) => Promise<Record<string, any>>;
+    integrityCheck: () => Promise<Record<string, any>>;
+    getSettings: () => Promise<Record<string, string>>;
+    updateSettings: (settings: Record<string, string>) => Promise<Record<string, string>>;
+  };
+  branches: {
+    getAll: () => Promise<Branch[]>;
+    getAccessible: () => Promise<Branch[]>;
+    create: (payload: Partial<Branch>) => Promise<{ success: boolean; id?: string }>;
+    update: (payload: Partial<Branch>) => Promise<boolean>;
+    deactivate: (id: string) => Promise<boolean>;
+    setDefault: (id: string) => Promise<boolean>;
+    assignUserBranches: (userId: string, branchIds: string[], defaultBranchId?: string) => Promise<boolean>;
+  };
+  classes: {
+    getAll: () => Promise<ClassTracking[]>;
+    create: (payload: Partial<ClassTracking>) => Promise<{ success: boolean; id?: string }>;
+    update: (payload: Partial<ClassTracking>) => Promise<boolean>;
+    deactivate: (id: string) => Promise<boolean>;
   };
 }
 

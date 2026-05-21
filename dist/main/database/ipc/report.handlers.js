@@ -6,10 +6,15 @@ const AuthRepository_1 = require("../repositories/AuthRepository");
 const ReportRepository_1 = require("../repositories/ReportRepository");
 function registerReportHandlers() {
     const requireReports = (token) => AuthRepository_1.AuthRepository.requirePermission(token, 'reports.view');
-    electron_1.ipcMain.handle('reports:profitAndLoss', (_, token, dateFrom, dateTo) => { requireReports(token); return ReportRepository_1.ReportRepository.profitAndLoss({ dateFrom, dateTo }); });
-    electron_1.ipcMain.handle('reports:balanceSheet', (_, token, dateTo) => { requireReports(token); return ReportRepository_1.ReportRepository.balanceSheet(dateTo); });
+    const requireBranch = (token, branchId) => {
+        requireReports(token);
+        if (branchId)
+            AuthRepository_1.AuthRepository.requireBranchAccess(token, branchId);
+    };
+    electron_1.ipcMain.handle('reports:profitAndLoss', (_, token, dateFrom, dateTo, branchId, classId) => { requireBranch(token, branchId); return ReportRepository_1.ReportRepository.profitAndLoss({ dateFrom, dateTo, branchId, classId }); });
+    electron_1.ipcMain.handle('reports:balanceSheet', (_, token, dateTo, branchId) => { requireBranch(token, branchId); return ReportRepository_1.ReportRepository.balanceSheet(dateTo, branchId); });
     electron_1.ipcMain.handle('reports:cashFlow', (_, token, dateFrom, dateTo) => { requireReports(token); return ReportRepository_1.ReportRepository.cashFlow({ dateFrom, dateTo }); });
-    electron_1.ipcMain.handle('reports:trialBalance', (_, token, dateFrom, dateTo) => { requireReports(token); return ReportRepository_1.ReportRepository.trialBalance({ dateFrom, dateTo }); });
+    electron_1.ipcMain.handle('reports:trialBalance', (_, token, dateFrom, dateTo, branchId, classId) => { requireBranch(token, branchId); return ReportRepository_1.ReportRepository.trialBalance({ dateFrom, dateTo, branchId, classId }); });
     electron_1.ipcMain.handle('reports:generalLedger', (_, token, dateFrom, dateTo) => { requireReports(token); return ReportRepository_1.ReportRepository.generalLedger({ dateFrom, dateTo }); });
     electron_1.ipcMain.handle('reports:arAging', (_, token, dateTo) => { requireReports(token); return ReportRepository_1.ReportRepository.arAging(dateTo); });
     electron_1.ipcMain.handle('reports:apAging', (_, token, dateTo) => { requireReports(token); return ReportRepository_1.ReportRepository.apAging(dateTo); });

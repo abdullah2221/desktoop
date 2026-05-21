@@ -46,12 +46,48 @@ function runSchemaBootstrap() {
     CREATE TABLE IF NOT EXISTS branches (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
+      branch_code TEXT UNIQUE,
       name TEXT NOT NULL,
+      branch_name TEXT,
       phone TEXT,
+      email TEXT,
       address TEXT,
+      manager_name TEXT,
+      tax_number TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      is_default INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS classes (
+      id TEXT PRIMARY KEY,
+      class_code TEXT NOT NULL UNIQUE,
+      class_name TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS user_branches (
+      user_id TEXT NOT NULL,
+      branch_id TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, branch_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS branch_settings (
+      branch_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (branch_id, key),
+      FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS roles (
@@ -334,11 +370,15 @@ function runSchemaBootstrap() {
       description TEXT NOT NULL,
       reference_type TEXT,
       reference_id TEXT,
+      branch_id TEXT DEFAULT 'B001',
+      class_id TEXT,
       total_debit REAL NOT NULL,
       total_credit REAL NOT NULL,
       status TEXT DEFAULT 'posted',
       created_by TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL,
       FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
     );
 
@@ -568,6 +608,24 @@ function runSchemaBootstrap() {
       last_seen_at TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS backup_history (
+      id TEXT PRIMARY KEY,
+      file_path TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      backup_type TEXT NOT NULL DEFAULT 'manual',
+      status TEXT NOT NULL DEFAULT 'success',
+      file_size INTEGER NOT NULL DEFAULT 0,
+      integrity_status TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS backup_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 function runBackfillAndAlters() {
@@ -626,6 +684,21 @@ function runBackfillAndAlters() {
     addColumn('users', 'password_hash TEXT');
     addColumn('users', 'status TEXT DEFAULT "active"');
     addColumn('users', 'last_login TEXT');
+    addColumn('branches', 'branch_code TEXT');
+    addColumn('branches', 'branch_name TEXT');
+    addColumn('branches', 'email TEXT');
+    addColumn('branches', 'manager_name TEXT');
+    addColumn('branches', 'tax_number TEXT');
+    addColumn('branches', 'status TEXT DEFAULT "active"');
+    addColumn('branches', 'is_default INTEGER DEFAULT 0');
+    addColumn('sales', 'class_id TEXT');
+    addColumn('purchases', 'class_id TEXT');
+    addColumn('expenses', 'class_id TEXT');
+    addColumn('invoices', 'class_id TEXT');
+    addColumn('journal_entries', 'branch_id TEXT DEFAULT "B001"');
+    addColumn('journal_entries', 'class_id TEXT');
+    addColumn('money_transactions', 'class_id TEXT');
+    addColumn('stock_movements', 'class_id TEXT');
     if (!hasColumn('products', 'sku')) {
         addColumn('products', 'sku TEXT');
     }
@@ -655,6 +728,14 @@ function runBackfillAndAlters() {
     createIndex('idx_users_role', 'users', 'role_id');
     createIndex('idx_user_sessions_token', 'user_sessions', 'token_hash');
     createIndex('idx_user_sessions_user', 'user_sessions', 'user_id');
+    createIndex('idx_backup_history_created', 'backup_history', 'created_at');
+    createIndex('idx_user_branches_user', 'user_branches', 'user_id');
+    createIndex('idx_user_branches_branch', 'user_branches', 'branch_id');
+    createIndex('idx_journal_entries_branch', 'journal_entries', 'branch_id');
+    createIndex('idx_sales_branch', 'sales', 'branch_id');
+    createIndex('idx_purchases_branch', 'purchases', 'branch_id');
+    createIndex('idx_expenses_branch', 'expenses', 'branch_id');
+    createIndex('idx_invoices_branch', 'invoices', 'branch_id');
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_sku_unique ON products(sku)');
 }
 function seedDefaults() {
@@ -663,7 +744,17 @@ function seedDefaults() {
         db.exec(`
       INSERT OR IGNORE INTO tenants (id, name) VALUES ('T001', 'Default Tenant');
 
-      INSERT OR IGNORE INTO branches (id, tenant_id, name) VALUES ('B001', 'T001', 'Main Branch');
+      INSERT OR IGNORE INTO branches (id, tenant_id, branch_code, name, branch_name, phone, address, status, is_default)
+      VALUES ('B001', 'T001', 'MAIN', 'Main Branch', 'Main Branch', '', '', 'active', 1);
+
+      UPDATE branches
+      SET branch_code=COALESCE(branch_code, id),
+          branch_name=COALESCE(branch_name, name),
+          status=COALESCE(status, 'active'),
+          is_default=CASE WHEN id='B001' THEN 1 ELSE COALESCE(is_default, 0) END;
+
+      INSERT OR IGNORE INTO classes (id, class_code, class_name, description, status) VALUES
+      ('CLS-GEN', 'GENERAL', 'General Operations', 'Default class for unassigned transactions', 'active');
 
       INSERT OR IGNORE INTO roles (id, name, description) VALUES
       ('R001', 'Owner/Admin', 'Full system access'),
@@ -681,7 +772,10 @@ function seedDefaults() {
       ('PERM-SETTINGS-EDIT', 'settings.edit', 'Edit store settings'),
       ('PERM-USERS-MANAGE', 'users.manage', 'Manage users, roles, and permissions'),
       ('PERM-BANKING-MANAGE', 'banking.manage', 'Manage bank and cash transactions'),
-      ('PERM-TAXES-MANAGE', 'taxes.manage', 'Manage tax setup and reports');
+      ('PERM-TAXES-MANAGE', 'taxes.manage', 'Manage tax setup and reports'),
+      ('PERM-BACKUP-MANAGE', 'backup.manage', 'Create backups, restore data, and manage retention');
+      INSERT OR IGNORE INTO permissions (id, name, description) VALUES
+      ('PERM-BRANCH-MANAGE', 'branch.manage', 'Manage branches, classes, and branch access');
 
       INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
       SELECT 'R001', id FROM permissions;
@@ -697,6 +791,14 @@ function seedDefaults() {
       ('R004', 'PERM-ACCOUNTING-JOURNAL-CREATE'),
       ('R004', 'PERM-BANKING-MANAGE'),
       ('R004', 'PERM-TAXES-MANAGE');
+
+      INSERT OR IGNORE INTO backup_settings (key, value) VALUES
+      ('automatic_backup_enabled', 'false'),
+      ('backup_frequency', 'daily'),
+      ('retention_count', '10'),
+      ('backup_before_migrations', 'true'),
+      ('last_backup_path', ''),
+      ('last_backup_at', '');
 
       INSERT OR IGNORE INTO users (
         id, tenant_id, branch_id, username, full_name, email, password_hash, role_id, status
@@ -717,6 +819,9 @@ function seedDefaults() {
           role_id='R001',
           status=COALESCE(status, 'active')
       WHERE id='U001';
+
+      INSERT OR IGNORE INTO user_branches (user_id, branch_id, is_default)
+      VALUES ('U001', 'B001', 1);
 
       INSERT OR IGNORE INTO units (id, tenant_id, name, abbreviation, status) VALUES
       ('U001', 'T001', 'Pieces', 'pcs', 'active'),

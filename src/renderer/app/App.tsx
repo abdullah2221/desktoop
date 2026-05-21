@@ -17,6 +17,9 @@ function AppContent() {
     hasPermission,
     logout,
     appVersion,
+    accessibleBranches,
+    activeBranchId,
+    setActiveBranch,
     checkoutNotification,
     appNotification
   } = useErp();
@@ -47,7 +50,10 @@ function AppContent() {
         branchId: activeUser?.branch_id || ''
       }}
       appVersion={appVersion}
+      branches={accessibleBranches}
+      activeBranchId={activeBranchId}
       hasPermission={hasPermission}
+      onBranchChange={setActiveBranch}
       onLogout={logout}
     >
       {/* CHECKOUT NOTIFICATION */}

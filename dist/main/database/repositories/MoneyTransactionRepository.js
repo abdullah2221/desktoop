@@ -82,7 +82,7 @@ class MoneyTransactionRepository {
             db.prepare('UPDATE cash_bank_accounts SET current_balance = current_balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.amount, data.from_account_id);
             db.prepare('UPDATE cash_bank_accounts SET current_balance = current_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.amount, data.to_account_id);
             JournalRepository_1.JournalRepository.createJournal({
-                entry_no: `AUTO-TRF-${Date.now()}`,
+                entry_no: `AUTO-TRF-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
                 entry_date: data.transaction_date,
                 description: `Transfer ${data.amount} from ${source.code} to ${destination.code}`,
                 reference_type: 'TRANSFER',
@@ -144,7 +144,7 @@ class MoneyTransactionRepository {
                 ? { account_id: data.offset_gl_account_id || 'ACC-3000', debit: 0, credit: data.amount, description: type }
                 : { account_id: account.linked_gl_account_id, debit: 0, credit: data.amount, description: type };
             JournalRepository_1.JournalRepository.createJournal({
-                entry_no: `AUTO-MTX-${Date.now()}`,
+                entry_no: `AUTO-MTX-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
                 entry_date: data.transaction_date,
                 description: `${type} on ${account.code}`,
                 reference_type: 'MONEY_TRANSACTION',

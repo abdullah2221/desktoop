@@ -21,6 +21,12 @@ import { ReportRepository } from '../repositories/ReportRepository';
 import { SupplierRepository } from '../repositories/SupplierRepository';
 import { AuthRepository } from '../repositories/AuthRepository';
 import { UserRepository } from '../repositories/UserRepository';
+import { RoleRepository } from '../repositories/RoleRepository';
+import { BackupRepository } from '../repositories/BackupRepository';
+import { BranchRepository } from '../repositories/BranchRepository';
+import { ClassRepository } from '../repositories/ClassRepository';
+import { JournalRepository } from '../repositories/JournalRepository';
+import crypto from 'crypto';
 import * as fs from 'fs';
 
 describe('SQLite Database Repositories Integration Tests', () => {
@@ -35,9 +41,17 @@ describe('SQLite Database Repositories Integration Tests', () => {
       'payment_method_accounts',
       'cash_bank_accounts',
       'user_sessions',
+      'backup_history',
+      'backup_settings',
       'journal_entry_lines',
       'journal_entries',
       'chart_of_accounts',
+      'role_permissions',
+      'permissions',
+      'roles',
+      'branch_settings',
+      'user_branches',
+      'classes',
       'supplier_ledger',
       'supplier_payments',
       'stock_movements',
@@ -498,6 +512,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(adminLogin.token).toBeTruthy();
     expect(adminLogin.user.username).toBe('admin');
     expect(adminLogin.user.permissions).toContain('users.manage');
+    expect(AuthRepository.getCurrentUser(adminLogin.token)?.username).toBe('admin');
 
     expect(() => AuthRepository.login('admin', 'wrong-password')).toThrow('Invalid username or password.');
 
@@ -522,15 +537,185 @@ describe('SQLite Database Repositories Integration Tests', () => {
     const cashierLogin = AuthRepository.login('testcashier', 'cashier123');
     expect(cashierLogin.user.permissions).toContain('pos.sale.create');
     expect(AuthRepository.hasPermission(cashierLogin.token, 'pos.sale.create')).toBe(true);
+    expect(AuthRepository.hasPermission(adminLogin.token, 'backup.manage')).toBe(true);
+    expect(AuthRepository.hasPermission(cashierLogin.token, 'backup.manage')).toBe(false);
     expect(AuthRepository.hasPermission(cashierLogin.token, 'reports.view')).toBe(false);
     expect(() => AuthRepository.requirePermission(cashierLogin.token, 'reports.view')).toThrow('Unauthorized');
+    expect(() => AuthRepository.requirePermission(cashierLogin.token, 'accounting.journal.create')).toThrow('Unauthorized');
     expect(() => AuthRepository.requirePermission(null, 'users.manage')).toThrow('Unauthorized');
+
+    expect(UserRepository.update({
+      id: 'U001',
+      username: 'admin',
+      full_name: 'Updated Admin Header',
+      email: 'updated-admin@example.local',
+      role_id: 'R001',
+      branch_id: 'B001',
+      status: 'active'
+    }, adminLogin.user.id)).toBe(true);
+    const refreshedAdmin = AuthRepository.getCurrentUser(adminLogin.token);
+    expect(refreshedAdmin?.full_name).toBe('Updated Admin Header');
+    expect(refreshedAdmin?.email).toBe('updated-admin@example.local');
+
+    const tempRole = RoleRepository.create({
+      id: 'TEST-REFRESH-ROLE',
+      name: 'Test Refresh Role',
+      description: 'Used for active permission refresh tests',
+      permission_ids: ['PERM-POS-SALE-CREATE']
+    }, adminLogin.user.id);
+    expect(tempRole.success).toBe(true);
+    UserRepository.create({
+      id: 'TEST-REFRESH-USER',
+      username: 'refreshuser',
+      full_name: 'Refresh User',
+      password: 'refresh123',
+      role_id: 'TEST-REFRESH-ROLE',
+      status: 'active',
+      branch_id: 'B001'
+    }, adminLogin.user.id);
+    const refreshLogin = AuthRepository.login('refreshuser', 'refresh123');
+    expect(AuthRepository.hasPermission(refreshLogin.token, 'reports.view')).toBe(false);
+    expect(RoleRepository.update({
+      id: 'TEST-REFRESH-ROLE',
+      name: 'Test Refresh Role',
+      description: 'Updated permission set',
+      permission_ids: ['PERM-POS-SALE-CREATE', 'PERM-REPORTS-VIEW']
+    }, adminLogin.user.id)).toBe(true);
+    expect(AuthRepository.getCurrentUser(refreshLogin.token)?.permissions).toContain('reports.view');
+
+    const refreshTokenHash = crypto.createHash('sha256').update(refreshLogin.token).digest('hex');
+    db.prepare("UPDATE user_sessions SET expires_at='2000-01-01T00:00:00.000Z' WHERE token_hash = ?").run(refreshTokenHash);
+    expect(AuthRepository.getCurrentUser(refreshLogin.token)).toBeNull();
 
     expect(UserRepository.resetPassword('TEST-CASHIER-USER', 'newCashier123', adminLogin.user.id)).toBe(true);
     expect(() => AuthRepository.login('testcashier', 'cashier123')).toThrow('Invalid username or password.');
     expect(AuthRepository.login('testcashier', 'newCashier123').user.username).toBe('testcashier');
 
+    expect(() => UserRepository.deactivate('U001', 'U001')).toThrow('Users cannot deactivate their own account.');
     expect(UserRepository.deactivate('TEST-CASHIER-USER', adminLogin.user.id)).toBe(true);
     expect(() => AuthRepository.login('testcashier', 'newCashier123')).toThrow('Invalid username or password.');
+    expect(AuthRepository.logout(adminLogin.token)).toBe(true);
+    expect(AuthRepository.getCurrentUser(adminLogin.token)).toBeNull();
+  });
+
+  it('should create backup history, validate backups, pass integrity checks, and enforce retention', () => {
+    const adminLogin = AuthRepository.login('admin', 'admin123');
+    expect(AuthRepository.hasPermission(adminLogin.token, 'backup.manage')).toBe(true);
+
+    BackupRepository.updateSettings({ retention_count: '1' });
+    const first = BackupRepository.create('manual', adminLogin.user.id);
+    expect(first.success).toBe(true);
+    expect(fs.existsSync(first.file_path)).toBe(true);
+
+    const validation = BackupRepository.validate(first.file_path);
+    expect(validation.valid).toBe(true);
+    expect(validation.integrity).toBe('ok');
+
+    const second = BackupRepository.create('manual', adminLogin.user.id);
+    expect(second.success).toBe(true);
+    expect(fs.existsSync(second.file_path)).toBe(true);
+
+    const history = BackupRepository.list() as Array<{ id: string; status: string; file_path: string }>;
+    expect(history.length).toBeGreaterThanOrEqual(2);
+    expect(history.some((row) => row.status === 'success')).toBe(true);
+    expect(history.some((row) => row.status === 'pruned')).toBe(true);
+
+    const integrity = BackupRepository.integrityCheck();
+    expect(integrity.ok).toBe(true);
+    expect(integrity.integrity).toBe('ok');
+    expect(integrity.databaseSize).toBeGreaterThan(0);
+
+    const invalid = BackupRepository.validate('/tmp/does-not-exist-swiftpos.db');
+    expect(invalid.valid).toBe(false);
+
+    for (const row of history) {
+      if (fs.existsSync(row.file_path)) fs.unlinkSync(row.file_path);
+    }
+  });
+
+  it('should manage branches, branch access, branch-filtered reports, and class assignments', () => {
+    const adminLogin = AuthRepository.login('admin', 'admin123');
+    const today = new Date().toISOString().split('T')[0];
+
+    const branch = BranchRepository.create({
+      id: 'TEST-BR-002',
+      branch_code: 'BR002',
+      branch_name: 'Second Test Branch',
+      address: 'Model Town, Lahore',
+      phone: '042-000000',
+      email: 'branch2@example.local',
+      manager_name: 'Branch Manager',
+      tax_number: 'NTN-BR002',
+      status: 'active'
+    }, adminLogin.user.id);
+    expect(branch.success).toBe(true);
+
+    const cls = ClassRepository.create({
+      id: 'TEST-CLS-ONLINE',
+      class_code: 'ONLINE',
+      class_name: 'Online Sales',
+      description: 'Digital commerce department',
+      status: 'active'
+    }, adminLogin.user.id);
+    expect(cls.success).toBe(true);
+
+    const role = RoleRepository.create({
+      id: 'TEST-BRANCH-REPORTER',
+      name: 'Branch Reporter',
+      description: 'Reports access limited by branch assignment',
+      permission_ids: ['PERM-REPORTS-VIEW']
+    }, adminLogin.user.id);
+    expect(role.success).toBe(true);
+
+    const user = UserRepository.create({
+      id: 'TEST-BRANCH-USER',
+      username: 'branchreporter',
+      full_name: 'Branch Reporter',
+      password: 'branch123',
+      role_id: 'TEST-BRANCH-REPORTER',
+      status: 'active',
+      branch_id: 'TEST-BR-002'
+    }, adminLogin.user.id);
+    expect(user.success).toBe(true);
+    expect(BranchRepository.assignUserBranches('TEST-BRANCH-USER', ['TEST-BR-002'], 'TEST-BR-002')).toBe(true);
+
+    const branchLogin = AuthRepository.login('branchreporter', 'branch123');
+    expect(branchLogin.user.branches?.map((row: any) => row.id)).toContain('TEST-BR-002');
+    expect(BranchRepository.userCanAccessBranch('TEST-BRANCH-USER', 'TEST-BR-002')).toBe(true);
+    expect(BranchRepository.userCanAccessBranch('TEST-BRANCH-USER', 'B001')).toBe(false);
+    expect(() => AuthRepository.requireBranchAccess(branchLogin.token, 'B001')).toThrow('Unauthorized');
+    expect(AuthRepository.requireBranchAccess(branchLogin.token, 'TEST-BR-002').id).toBe('TEST-BRANCH-USER');
+
+    const journal = JournalRepository.createJournal({
+      id: 'TEST-BRANCH-JOURNAL',
+      entry_no: 'TEST-BRANCH-JOURNAL',
+      entry_date: today,
+      description: 'Branch/class reporting probe',
+      reference_type: 'TEST_BRANCH',
+      reference_id: 'TEST-BR-002',
+      branch_id: 'TEST-BR-002',
+      class_id: 'TEST-CLS-ONLINE',
+      lines: [
+        { account_id: 'ACC-1000', description: 'Cash received', debit: 1234, credit: 0 },
+        { account_id: 'ACC-4000', description: 'Branch income', debit: 0, credit: 1234 }
+      ]
+    });
+    expect(journal.success).toBe(true);
+
+    const branchPnL = ReportRepository.profitAndLoss({ dateFrom: '2000-01-01', dateTo: today, branchId: 'TEST-BR-002' });
+    const classPnL = ReportRepository.profitAndLoss({ dateFrom: '2000-01-01', dateTo: today, branchId: 'TEST-BR-002', classId: 'TEST-CLS-ONLINE' });
+    const mainBranchPnL = ReportRepository.profitAndLoss({ dateFrom: '2000-01-01', dateTo: today, branchId: 'B001', classId: 'TEST-CLS-ONLINE' });
+
+    expect(branchPnL.totalIncome).toBeGreaterThanOrEqual(1234);
+    expect(classPnL.totalIncome).toBe(1234);
+    expect(mainBranchPnL.totalIncome).toBe(0);
+
+    const trial = ReportRepository.trialBalance({ dateFrom: '2000-01-01', dateTo: today, branchId: 'TEST-BR-002', classId: 'TEST-CLS-ONLINE' });
+    expect(trial.totalDebit).toBeCloseTo(trial.totalCredit, 2);
+    expect(trial.totalDebit).toBe(1234);
+
+    expect(BranchRepository.setDefault('TEST-BR-002')).toBe(true);
+    expect((BranchRepository.getAll() as Array<{ id: string; is_default: number }>).find((row) => row.id === 'TEST-BR-002')?.is_default).toBe(1);
+    expect(BranchRepository.setDefault('B001')).toBe(true);
   });
 });

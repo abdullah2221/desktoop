@@ -4,11 +4,15 @@ import { ReportRepository } from '../repositories/ReportRepository';
 
 export function registerReportHandlers() {
   const requireReports = (token: string) => AuthRepository.requirePermission(token, 'reports.view');
+  const requireBranch = (token: string, branchId?: string) => {
+    requireReports(token);
+    if (branchId) AuthRepository.requireBranchAccess(token, branchId);
+  };
 
-  ipcMain.handle('reports:profitAndLoss', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.profitAndLoss({ dateFrom, dateTo }); });
-  ipcMain.handle('reports:balanceSheet', (_, token: string, dateTo: string) => { requireReports(token); return ReportRepository.balanceSheet(dateTo); });
+  ipcMain.handle('reports:profitAndLoss', (_, token: string, dateFrom: string, dateTo: string, branchId?: string, classId?: string) => { requireBranch(token, branchId); return ReportRepository.profitAndLoss({ dateFrom, dateTo, branchId, classId }); });
+  ipcMain.handle('reports:balanceSheet', (_, token: string, dateTo: string, branchId?: string) => { requireBranch(token, branchId); return ReportRepository.balanceSheet(dateTo, branchId); });
   ipcMain.handle('reports:cashFlow', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.cashFlow({ dateFrom, dateTo }); });
-  ipcMain.handle('reports:trialBalance', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.trialBalance({ dateFrom, dateTo }); });
+  ipcMain.handle('reports:trialBalance', (_, token: string, dateFrom: string, dateTo: string, branchId?: string, classId?: string) => { requireBranch(token, branchId); return ReportRepository.trialBalance({ dateFrom, dateTo, branchId, classId }); });
   ipcMain.handle('reports:generalLedger', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.generalLedger({ dateFrom, dateTo }); });
   ipcMain.handle('reports:arAging', (_, token: string, dateTo: string) => { requireReports(token); return ReportRepository.arAging(dateTo); });
   ipcMain.handle('reports:apAging', (_, token: string, dateTo: string) => { requireReports(token); return ReportRepository.apAging(dateTo); });

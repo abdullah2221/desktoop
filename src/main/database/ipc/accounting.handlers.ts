@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { AccountingRepository } from '../repositories/AccountingRepository';
+import { AuthRepository } from '../repositories/AuthRepository';
 import { JournalRepository } from '../repositories/JournalRepository';
 
 export function registerAccountingHandlers() {
@@ -7,15 +8,18 @@ export function registerAccountingHandlers() {
     return AccountingRepository.getAllAccounts();
   });
 
-  ipcMain.handle('accounts:create', (_, account: any) => {
+  ipcMain.handle('accounts:create', (_, token: string, account: any) => {
+    AuthRepository.requirePermission(token, 'accounting.journal.create');
     return AccountingRepository.createAccount(account);
   });
 
-  ipcMain.handle('accounts:update', (_, account: any) => {
+  ipcMain.handle('accounts:update', (_, token: string, account: any) => {
+    AuthRepository.requirePermission(token, 'accounting.journal.create');
     return AccountingRepository.updateAccount(account);
   });
 
-  ipcMain.handle('accounts:deactivate', (_, id: string) => {
+  ipcMain.handle('accounts:deactivate', (_, token: string, id: string) => {
+    AuthRepository.requirePermission(token, 'accounting.journal.create');
     return AccountingRepository.deactivateAccount(id);
   });
 
@@ -23,7 +27,8 @@ export function registerAccountingHandlers() {
     return JournalRepository.getAllJournals();
   });
 
-  ipcMain.handle('journals:create', (_, journal: any) => {
+  ipcMain.handle('journals:create', (_, token: string, journal: any) => {
+    AuthRepository.requirePermission(token, 'accounting.journal.create');
     return JournalRepository.createJournal(journal);
   });
 }

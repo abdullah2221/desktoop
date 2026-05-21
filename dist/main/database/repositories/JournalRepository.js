@@ -52,10 +52,10 @@ class JournalRepository {
             const insertJE = db.prepare(`
         INSERT INTO journal_entries (
           id, entry_no, entry_date, description, reference_type, 
-          reference_id, total_debit, total_credit, status, created_by
+          reference_id, branch_id, class_id, total_debit, total_credit, status, created_by
         ) VALUES (
           @id, @entry_no, @entry_date, @description, @reference_type,
-          @reference_id, @total_debit, @total_credit, @status, @created_by
+          @reference_id, @branch_id, @class_id, @total_debit, @total_credit, @status, @created_by
         )
       `);
             insertJE.run({
@@ -65,6 +65,8 @@ class JournalRepository {
                 description: data.description,
                 reference_type: data.reference_type || null,
                 reference_id: data.reference_id || null,
+                branch_id: data.branch_id || 'B001',
+                class_id: data.class_id || null,
                 total_debit: totalDebit,
                 total_credit: totalCredit,
                 status: data.status || 'posted',

@@ -118,14 +118,14 @@ contextBridge.exposeInMainWorld('api', {
 
   accounts: {
     getAll: () => ipcRenderer.invoke('accounts:getAll'),
-    create: (account: Partial<Account>) => ipcRenderer.invoke('accounts:create', account),
-    update: (account: Partial<Account>) => ipcRenderer.invoke('accounts:update', account),
-    deactivate: (id: string) => ipcRenderer.invoke('accounts:deactivate', id),
+    create: (account: Partial<Account>) => ipcRenderer.invoke('accounts:create', sessionToken, account),
+    update: (account: Partial<Account>) => ipcRenderer.invoke('accounts:update', sessionToken, account),
+    deactivate: (id: string) => ipcRenderer.invoke('accounts:deactivate', sessionToken, id),
   },
 
   journals: {
     getAll: () => ipcRenderer.invoke('journals:getAll'),
-    create: (journal: Partial<JournalEntry> & { lines: unknown[] }) => ipcRenderer.invoke('journals:create', journal),
+    create: (journal: Partial<JournalEntry> & { lines: unknown[] }) => ipcRenderer.invoke('journals:create', sessionToken, journal),
   },
 
   quotes: {
@@ -191,10 +191,10 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   reports: {
-    profitAndLoss: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:profitAndLoss', sessionToken, dateFrom, dateTo),
-    balanceSheet: (dateTo: string) => ipcRenderer.invoke('reports:balanceSheet', sessionToken, dateTo),
+    profitAndLoss: (dateFrom: string, dateTo: string, branchId?: string, classId?: string) => ipcRenderer.invoke('reports:profitAndLoss', sessionToken, dateFrom, dateTo, branchId, classId),
+    balanceSheet: (dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:balanceSheet', sessionToken, dateTo, branchId),
     cashFlow: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:cashFlow', sessionToken, dateFrom, dateTo),
-    trialBalance: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:trialBalance', sessionToken, dateFrom, dateTo),
+    trialBalance: (dateFrom: string, dateTo: string, branchId?: string, classId?: string) => ipcRenderer.invoke('reports:trialBalance', sessionToken, dateFrom, dateTo, branchId, classId),
     generalLedger: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:generalLedger', sessionToken, dateFrom, dateTo),
     arAging: (dateTo: string) => ipcRenderer.invoke('reports:arAging', sessionToken, dateTo),
     apAging: (dateTo: string) => ipcRenderer.invoke('reports:apAging', sessionToken, dateTo),
@@ -218,5 +218,32 @@ contextBridge.exposeInMainWorld('api', {
     getPermissions: () => ipcRenderer.invoke('roles:getPermissions', sessionToken),
     create: (payload: unknown) => ipcRenderer.invoke('roles:create', sessionToken, payload),
     update: (payload: unknown) => ipcRenderer.invoke('roles:update', sessionToken, payload),
+  },
+
+  backup: {
+    create: () => ipcRenderer.invoke('backup:create', sessionToken),
+    list: () => ipcRenderer.invoke('backup:list', sessionToken),
+    restore: (filePath: string) => ipcRenderer.invoke('backup:restore', sessionToken, filePath),
+    validate: (filePath: string) => ipcRenderer.invoke('backup:validate', sessionToken, filePath),
+    integrityCheck: () => ipcRenderer.invoke('backup:integrityCheck', sessionToken),
+    getSettings: () => ipcRenderer.invoke('backup:getSettings', sessionToken),
+    updateSettings: (settings: Record<string, string>) => ipcRenderer.invoke('backup:updateSettings', sessionToken, settings),
+  },
+
+  branches: {
+    getAll: () => ipcRenderer.invoke('branches:getAll', sessionToken),
+    getAccessible: () => ipcRenderer.invoke('branches:getAccessible', sessionToken),
+    create: (payload: unknown) => ipcRenderer.invoke('branches:create', sessionToken, payload),
+    update: (payload: unknown) => ipcRenderer.invoke('branches:update', sessionToken, payload),
+    deactivate: (id: string) => ipcRenderer.invoke('branches:deactivate', sessionToken, id),
+    setDefault: (id: string) => ipcRenderer.invoke('branches:setDefault', sessionToken, id),
+    assignUserBranches: (userId: string, branchIds: string[], defaultBranchId?: string) => ipcRenderer.invoke('branches:assignUserBranches', sessionToken, userId, branchIds, defaultBranchId),
+  },
+
+  classes: {
+    getAll: () => ipcRenderer.invoke('classes:getAll', sessionToken),
+    create: (payload: unknown) => ipcRenderer.invoke('classes:create', sessionToken, payload),
+    update: (payload: unknown) => ipcRenderer.invoke('classes:update', sessionToken, payload),
+    deactivate: (id: string) => ipcRenderer.invoke('classes:deactivate', sessionToken, id),
   }
 });

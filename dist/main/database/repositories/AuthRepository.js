@@ -7,6 +7,7 @@ exports.AuthRepository = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const connection_1 = require("../connection");
 const AuditLogRepository_1 = require("./AuditLogRepository");
+const BranchRepository_1 = require("./BranchRepository");
 const SESSION_DAYS = 7;
 const HASH_ITERATIONS = 120000;
 class AuthRepository {
@@ -38,6 +39,7 @@ class AuthRepository {
             status: row.status,
             last_login: row.last_login,
             branch_id: row.branch_id,
+            branches: BranchRepository_1.BranchRepository.getAccessibleForUser(row.id),
             permissions: row.permissions ? String(row.permissions).split(',').filter(Boolean) : []
         };
     }
@@ -114,6 +116,13 @@ class AuthRepository {
         if (!this.hasPermission(token, permission)) {
             throw new Error(`Unauthorized: ${permission} permission is required.`);
         }
+    }
+    static requireBranchAccess(token, branchId) {
+        const user = this.getCurrentUser(token);
+        if (!user || !BranchRepository_1.BranchRepository.userCanAccessBranch(user.id, branchId)) {
+            throw new Error('Unauthorized: user is not assigned to this branch.');
+        }
+        return user;
     }
 }
 exports.AuthRepository = AuthRepository;

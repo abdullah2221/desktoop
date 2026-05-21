@@ -91,13 +91,13 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     },
     accounts: {
         getAll: () => electron_1.ipcRenderer.invoke('accounts:getAll'),
-        create: (account) => electron_1.ipcRenderer.invoke('accounts:create', account),
-        update: (account) => electron_1.ipcRenderer.invoke('accounts:update', account),
-        deactivate: (id) => electron_1.ipcRenderer.invoke('accounts:deactivate', id),
+        create: (account) => electron_1.ipcRenderer.invoke('accounts:create', sessionToken, account),
+        update: (account) => electron_1.ipcRenderer.invoke('accounts:update', sessionToken, account),
+        deactivate: (id) => electron_1.ipcRenderer.invoke('accounts:deactivate', sessionToken, id),
     },
     journals: {
         getAll: () => electron_1.ipcRenderer.invoke('journals:getAll'),
-        create: (journal) => electron_1.ipcRenderer.invoke('journals:create', journal),
+        create: (journal) => electron_1.ipcRenderer.invoke('journals:create', sessionToken, journal),
     },
     quotes: {
         getAll: () => electron_1.ipcRenderer.invoke('quotes:getAll'),
@@ -155,10 +155,10 @@ electron_1.contextBridge.exposeInMainWorld('api', {
         markItemsCleared: (reconciliationId, transactionIds) => electron_1.ipcRenderer.invoke('bankReconciliations:markItemsCleared', reconciliationId, transactionIds),
     },
     reports: {
-        profitAndLoss: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:profitAndLoss', sessionToken, dateFrom, dateTo),
-        balanceSheet: (dateTo) => electron_1.ipcRenderer.invoke('reports:balanceSheet', sessionToken, dateTo),
+        profitAndLoss: (dateFrom, dateTo, branchId, classId) => electron_1.ipcRenderer.invoke('reports:profitAndLoss', sessionToken, dateFrom, dateTo, branchId, classId),
+        balanceSheet: (dateTo, branchId) => electron_1.ipcRenderer.invoke('reports:balanceSheet', sessionToken, dateTo, branchId),
         cashFlow: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:cashFlow', sessionToken, dateFrom, dateTo),
-        trialBalance: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:trialBalance', sessionToken, dateFrom, dateTo),
+        trialBalance: (dateFrom, dateTo, branchId, classId) => electron_1.ipcRenderer.invoke('reports:trialBalance', sessionToken, dateFrom, dateTo, branchId, classId),
         generalLedger: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:generalLedger', sessionToken, dateFrom, dateTo),
         arAging: (dateTo) => electron_1.ipcRenderer.invoke('reports:arAging', sessionToken, dateTo),
         apAging: (dateTo) => electron_1.ipcRenderer.invoke('reports:apAging', sessionToken, dateTo),
@@ -180,5 +180,29 @@ electron_1.contextBridge.exposeInMainWorld('api', {
         getPermissions: () => electron_1.ipcRenderer.invoke('roles:getPermissions', sessionToken),
         create: (payload) => electron_1.ipcRenderer.invoke('roles:create', sessionToken, payload),
         update: (payload) => electron_1.ipcRenderer.invoke('roles:update', sessionToken, payload),
+    },
+    backup: {
+        create: () => electron_1.ipcRenderer.invoke('backup:create', sessionToken),
+        list: () => electron_1.ipcRenderer.invoke('backup:list', sessionToken),
+        restore: (filePath) => electron_1.ipcRenderer.invoke('backup:restore', sessionToken, filePath),
+        validate: (filePath) => electron_1.ipcRenderer.invoke('backup:validate', sessionToken, filePath),
+        integrityCheck: () => electron_1.ipcRenderer.invoke('backup:integrityCheck', sessionToken),
+        getSettings: () => electron_1.ipcRenderer.invoke('backup:getSettings', sessionToken),
+        updateSettings: (settings) => electron_1.ipcRenderer.invoke('backup:updateSettings', sessionToken, settings),
+    },
+    branches: {
+        getAll: () => electron_1.ipcRenderer.invoke('branches:getAll', sessionToken),
+        getAccessible: () => electron_1.ipcRenderer.invoke('branches:getAccessible', sessionToken),
+        create: (payload) => electron_1.ipcRenderer.invoke('branches:create', sessionToken, payload),
+        update: (payload) => electron_1.ipcRenderer.invoke('branches:update', sessionToken, payload),
+        deactivate: (id) => electron_1.ipcRenderer.invoke('branches:deactivate', sessionToken, id),
+        setDefault: (id) => electron_1.ipcRenderer.invoke('branches:setDefault', sessionToken, id),
+        assignUserBranches: (userId, branchIds, defaultBranchId) => electron_1.ipcRenderer.invoke('branches:assignUserBranches', sessionToken, userId, branchIds, defaultBranchId),
+    },
+    classes: {
+        getAll: () => electron_1.ipcRenderer.invoke('classes:getAll', sessionToken),
+        create: (payload) => electron_1.ipcRenderer.invoke('classes:create', sessionToken, payload),
+        update: (payload) => electron_1.ipcRenderer.invoke('classes:update', sessionToken, payload),
+        deactivate: (id) => electron_1.ipcRenderer.invoke('classes:deactivate', sessionToken, id),
     }
 });

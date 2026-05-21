@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 import { useErp } from '../../app/providers/ErpContext';
-import { User } from '../../shared/types';
+import { Branch, User } from '../../shared/types';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
@@ -15,13 +15,15 @@ export const UsersPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [form, setForm] = useState<Partial<User> & { password?: string }>({ username: '', full_name: '', email: '', role_id: '', status: 'active', branch_id: 'B001', password: '' });
   const [resetPassword, setResetPassword] = useState('');
 
   const load = async () => {
-    const [userRows, roleRows] = await Promise.all([window.api.users.getAll(), window.api.roles.getAll()]);
+    const [userRows, roleRows, branchRows] = await Promise.all([window.api.users.getAll(), window.api.roles.getAll(), window.api.branches.getAll()]);
     setUsers(userRows);
     setRoles(roleRows as Role[]);
+    setBranches(branchRows);
     setForm((prev) => ({ ...prev, role_id: prev.role_id || (roleRows as Role[])[0]?.id || '' }));
   };
 
@@ -40,8 +42,13 @@ export const UsersPage: React.FC = () => {
       return;
     }
     const wasCurrentUser = Boolean(form.id && form.id === activeUser?.id);
+    let userId = form.id;
     if (form.id) await window.api.users.update(form);
-    else await window.api.users.create(form);
+    else {
+      const created = await window.api.users.create(form);
+      userId = created.id;
+    }
+    if (userId && form.branch_id) await window.api.branches.assignUserBranches(userId, [form.branch_id], form.branch_id);
     clearForm();
     await load();
     if (wasCurrentUser) {
@@ -115,7 +122,7 @@ export const UsersPage: React.FC = () => {
                 {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
               </select>
               <select className="erp-input" value={form.branch_id || 'B001'} onChange={(e) => setForm((p) => ({ ...p, branch_id: e.target.value }))}>
-                <option value="B001">Main Branch</option>
+                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.branch_code} - {branch.branch_name}</option>)}
               </select>
               <select className="erp-input" value={form.status || 'active'} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as 'active' | 'inactive' }))}>
                 <option value="active">Active</option>

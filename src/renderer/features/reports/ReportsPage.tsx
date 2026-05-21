@@ -47,10 +47,13 @@ const SimpleTable: React.FC<{ columns: string[]; rows: Array<Record<string, any>
 };
 
 export const ReportsPage: React.FC = () => {
-  const { notify } = useErp();
+  const { notify, accessibleBranches, activeBranchId } = useErp();
   const [reportKey, setReportKey] = useState<ReportKey>('profitAndLoss');
   const [dateFrom, setDateFrom] = useState(monthStart());
   const [dateTo, setDateTo] = useState(today());
+  const [branchFilter, setBranchFilter] = useState<string>(activeBranchId);
+  const [classFilter, setClassFilter] = useState<string>('');
+  const [classes, setClasses] = useState<Array<{ id: string; class_code: string; class_name: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<any>(null);
 
@@ -60,7 +63,9 @@ export const ReportsPage: React.FC = () => {
     setLoading(true);
     try {
       let data: any;
-      if (reportKey === 'balanceSheet') data = await window.api.reports.balanceSheet(dateTo);
+      if (reportKey === 'profitAndLoss') data = await window.api.reports.profitAndLoss(dateFrom, dateTo, branchFilter || undefined, classFilter || undefined);
+      else if (reportKey === 'balanceSheet') data = await window.api.reports.balanceSheet(dateTo, branchFilter || undefined);
+      else if (reportKey === 'trialBalance') data = await window.api.reports.trialBalance(dateFrom, dateTo, branchFilter || undefined, classFilter || undefined);
       else if (reportKey === 'arAging') data = await window.api.reports.arAging(dateTo);
       else if (reportKey === 'apAging') data = await window.api.reports.apAging(dateTo);
       else if (reportKey === 'inventoryValuation') data = await window.api.reports.inventoryValuation();
@@ -76,6 +81,14 @@ export const ReportsPage: React.FC = () => {
   useEffect(() => {
     loadReport();
   }, [reportKey]);
+
+  useEffect(() => {
+    setBranchFilter(activeBranchId);
+  }, [activeBranchId]);
+
+  useEffect(() => {
+    window.api.classes.getAll().then(setClasses).catch(() => setClasses([]));
+  }, []);
 
   const exportPlaceholder = () => notify('info', 'Export will be enabled in a future phase.');
 
@@ -200,6 +213,20 @@ export const ReportsPage: React.FC = () => {
           </div>
           <Input id="report-from" label="From" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <Input id="report-to" label="To / As Of" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Branch</label>
+            <select className="erp-input" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
+              <option value="">All Branches</option>
+              {accessibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.branch_code} - {branch.branch_name}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Class</label>
+            <select className="erp-input" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+              <option value="">All Classes</option>
+              {classes.map((row) => <option key={row.id} value={row.id}>{row.class_code} - {row.class_name}</option>)}
+            </select>
+          </div>
           <Button onClick={loadReport} disabled={loading}><RefreshCw className="w-4 h-4 mr-2" />Run</Button>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={exportPlaceholder}><Download className="w-4 h-4 mr-2" />PDF</Button>

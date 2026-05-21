@@ -37,34 +37,35 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDatabase = getDatabase;
+exports.getDatabasePath = getDatabasePath;
+exports.closeDatabase = closeDatabase;
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const electron_1 = require("electron");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 let db;
+let activeDbPath = '';
+function resolveDatabasePath() {
+    let dbDir = '';
+    try {
+        const isDev = !electron_1.app.isPackaged;
+        dbDir = isDev
+            ? path.join(electron_1.app.getAppPath(), 'database')
+            : path.join(electron_1.app.getPath('userData'), 'database');
+    }
+    catch {
+        dbDir = path.join(__dirname, '../../../database');
+    }
+    if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+    }
+    const isTestRuntime = typeof process !== 'undefined' && process.env.VITEST;
+    return path.join(dbDir, isTestRuntime ? 'test.db' : 'erp.db');
+}
 function getDatabase() {
     if (!db) {
-        let dbDir = '';
-        let dbPath = '';
-        try {
-            // Active Electron runtime
-            const isDev = !electron_1.app.isPackaged;
-            dbDir = isDev
-                ? path.join(electron_1.app.getAppPath(), 'database')
-                : path.join(electron_1.app.getPath('userData'), 'database');
-            if (!fs.existsSync(dbDir)) {
-                fs.mkdirSync(dbDir, { recursive: true });
-            }
-            dbPath = path.join(dbDir, 'erp.db');
-        }
-        catch {
-            // Non-Electron unit test fallback (Vitest, standard Node environment)
-            dbDir = path.join(__dirname, '../../../database');
-            if (!fs.existsSync(dbDir)) {
-                fs.mkdirSync(dbDir, { recursive: true });
-            }
-            dbPath = path.join(dbDir, 'test.db');
-        }
+        const dbPath = resolveDatabasePath();
+        activeDbPath = dbPath;
         console.log(`[Database Connection] Connecting SQLite: ${dbPath}`);
         db = new better_sqlite3_1.default(dbPath);
         // Enable WAL mode (Write-Ahead Logging) and foreign key constraints
@@ -72,4 +73,13 @@ function getDatabase() {
         db.pragma('foreign_keys = ON');
     }
     return db;
+}
+function getDatabasePath() {
+    return activeDbPath || resolveDatabasePath();
+}
+function closeDatabase() {
+    if (db) {
+        db.close();
+        db = undefined;
+    }
 }

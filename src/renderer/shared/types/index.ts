@@ -88,8 +88,34 @@ export interface User {
   status?: 'active' | 'inactive';
   last_login?: string;
   branch_id?: string;
+  branches?: Branch[];
   permissions?: string[];
   created_at?: string;
+}
+
+export interface Branch {
+  id: string;
+  branch_code: string;
+  branch_name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  manager_name?: string;
+  tax_number?: string;
+  status: 'active' | 'inactive';
+  is_default?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ClassTracking {
+  id: string;
+  class_code: string;
+  class_name: string;
+  description?: string;
+  status: 'active' | 'inactive';
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Tenant {
