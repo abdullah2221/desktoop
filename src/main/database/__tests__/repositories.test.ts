@@ -112,7 +112,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     const created = ProductRepository.create(newProduct);
     expect(created.success).toBe(true);
 
-    let almonds = ProductRepository.getById('TEST-P999') as { stock_quantity: number; sale_price: number };
+    let almonds = ProductRepository.getById('TEST-P999') as { stock_quantity: number; sale_price?: number };
     expect(almonds).toBeDefined();
     expect(almonds.stock_quantity).toBe(40);
 
@@ -140,7 +140,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     const credited = CustomerRepository.createOrIncrementCredit(customerName, 4500, 12000, dateStr);
     expect(credited).toBe(true);
 
-    let customers = CustomerRepository.getAll() as Array<{ name: string; credit: number; totalPurchases: number }>;
+    let customers = CustomerRepository.getAll() as Array<{ name: string; credit: number; totalPurchases?: number }>;
     let arif = customers.find((c) => c.name === customerName);
     expect(arif?.credit).toBe(4500);
     expect(arif?.totalPurchases).toBe(12000);
@@ -248,7 +248,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(quote.success).toBe(true);
 
     const quoteId = quote.id as string;
-    const quoteData = QuoteRepository.getById(quoteId) as { items: Array<{ product_id: string; quantity: number; unit_price: number; discount: number; tax_rate: number; line_total: number }>; customer_name: string };
+    const quoteData = QuoteRepository.getById(quoteId) as unknown as { items: Array<{ product_id: string; quantity: number; unit_price: number; discount: number; tax_rate: number; line_total: number }>; customer_name: string };
     const beforeProduct = ProductRepository.getById('P001') as { stock_quantity: number };
 
     const inv = InvoiceRepository.create({
@@ -282,7 +282,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(payment.success).toBe(true);
     expect(payment.newBalance).toBe(0);
 
-    const invoice = InvoiceRepository.getById(invoiceId) as { status: string; balance_due: number };
+    const invoice = InvoiceRepository.getById(invoiceId) as unknown as { status: string; balance_due: number };
     expect(invoice.status).toBe('Paid');
     expect(invoice.balance_due).toBe(0);
 
@@ -312,7 +312,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(quote.success).toBe(true);
     const quoteId = quote.id as string;
 
-    const byId = QuoteRepository.getById(quoteId) as { status: string };
+    const byId = QuoteRepository.getById(quoteId) as unknown as { status: string };
     expect(byId.status).toBe('Expired');
 
     const all = QuoteRepository.getAll() as Array<{ id: string; status: string }>;
@@ -510,8 +510,8 @@ describe('SQLite Database Repositories Integration Tests', () => {
   it('should authenticate users, hash passwords, assign roles, and enforce permissions', () => {
     const adminLogin = AuthRepository.login('admin', 'admin123');
     expect(adminLogin.token).toBeTruthy();
-    expect(adminLogin.user.username).toBe('admin');
-    expect(adminLogin.user.permissions).toContain('users.manage');
+    expect(adminLogin.user!.username).toBe('admin');
+    expect(adminLogin.user!.permissions).toContain('users.manage');
     expect(AuthRepository.getCurrentUser(adminLogin.token)?.username).toBe('admin');
 
     expect(() => AuthRepository.login('admin', 'wrong-password')).toThrow('Invalid username or password.');
@@ -525,7 +525,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
       role_id: 'R003',
       status: 'active',
       branch_id: 'B001'
-    }, adminLogin.user.id);
+    }, adminLogin.user!.id);
     expect(cashier.success).toBe(true);
 
     const db = getDatabase();
@@ -535,7 +535,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(stored.role_id).toBe('R003');
 
     const cashierLogin = AuthRepository.login('testcashier', 'cashier123');
-    expect(cashierLogin.user.permissions).toContain('pos.sale.create');
+    expect(cashierLogin.user!.permissions).toContain('pos.sale.create');
     expect(AuthRepository.hasPermission(cashierLogin.token, 'pos.sale.create')).toBe(true);
     expect(AuthRepository.hasPermission(adminLogin.token, 'backup.manage')).toBe(true);
     expect(AuthRepository.hasPermission(cashierLogin.token, 'backup.manage')).toBe(false);
@@ -552,7 +552,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
       role_id: 'R001',
       branch_id: 'B001',
       status: 'active'
-    }, adminLogin.user.id)).toBe(true);
+    }, adminLogin.user!.id)).toBe(true);
     const refreshedAdmin = AuthRepository.getCurrentUser(adminLogin.token);
     expect(refreshedAdmin?.full_name).toBe('Updated Admin Header');
     expect(refreshedAdmin?.email).toBe('updated-admin@example.local');
@@ -562,7 +562,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
       name: 'Test Refresh Role',
       description: 'Used for active permission refresh tests',
       permission_ids: ['PERM-POS-SALE-CREATE']
-    }, adminLogin.user.id);
+    }, adminLogin.user!.id);
     expect(tempRole.success).toBe(true);
     UserRepository.create({
       id: 'TEST-REFRESH-USER',
@@ -572,7 +572,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
       role_id: 'TEST-REFRESH-ROLE',
       status: 'active',
       branch_id: 'B001'
-    }, adminLogin.user.id);
+    }, adminLogin.user!.id);
     const refreshLogin = AuthRepository.login('refreshuser', 'refresh123');
     expect(AuthRepository.hasPermission(refreshLogin.token, 'reports.view')).toBe(false);
     expect(RoleRepository.update({
@@ -580,19 +580,19 @@ describe('SQLite Database Repositories Integration Tests', () => {
       name: 'Test Refresh Role',
       description: 'Updated permission set',
       permission_ids: ['PERM-POS-SALE-CREATE', 'PERM-REPORTS-VIEW']
-    }, adminLogin.user.id)).toBe(true);
+    }, adminLogin.user!.id)).toBe(true);
     expect(AuthRepository.getCurrentUser(refreshLogin.token)?.permissions).toContain('reports.view');
 
     const refreshTokenHash = crypto.createHash('sha256').update(refreshLogin.token).digest('hex');
     db.prepare("UPDATE user_sessions SET expires_at='2000-01-01T00:00:00.000Z' WHERE token_hash = ?").run(refreshTokenHash);
     expect(AuthRepository.getCurrentUser(refreshLogin.token)).toBeNull();
 
-    expect(UserRepository.resetPassword('TEST-CASHIER-USER', 'newCashier123', adminLogin.user.id)).toBe(true);
+    expect(UserRepository.resetPassword('TEST-CASHIER-USER', 'newCashier123', adminLogin.user!.id)).toBe(true);
     expect(() => AuthRepository.login('testcashier', 'cashier123')).toThrow('Invalid username or password.');
-    expect(AuthRepository.login('testcashier', 'newCashier123').user.username).toBe('testcashier');
+    expect(AuthRepository.login('testcashier', 'newCashier123').user!.username).toBe('testcashier');
 
     expect(() => UserRepository.deactivate('U001', 'U001')).toThrow('Users cannot deactivate their own account.');
-    expect(UserRepository.deactivate('TEST-CASHIER-USER', adminLogin.user.id)).toBe(true);
+    expect(UserRepository.deactivate('TEST-CASHIER-USER', adminLogin.user!.id)).toBe(true);
     expect(() => AuthRepository.login('testcashier', 'newCashier123')).toThrow('Invalid username or password.');
     expect(AuthRepository.logout(adminLogin.token)).toBe(true);
     expect(AuthRepository.getCurrentUser(adminLogin.token)).toBeNull();
@@ -603,7 +603,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(AuthRepository.hasPermission(adminLogin.token, 'backup.manage')).toBe(true);
 
     BackupRepository.updateSettings({ retention_count: '1' });
-    const first = BackupRepository.create('manual', adminLogin.user.id);
+    const first = BackupRepository.create('manual', adminLogin.user!.id);
     expect(first.success).toBe(true);
     expect(fs.existsSync(first.file_path)).toBe(true);
 
@@ -611,7 +611,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(validation.valid).toBe(true);
     expect(validation.integrity).toBe('ok');
 
-    const second = BackupRepository.create('manual', adminLogin.user.id);
+    const second = BackupRepository.create('manual', adminLogin.user!.id);
     expect(second.success).toBe(true);
     expect(fs.existsSync(second.file_path)).toBe(true);
 
@@ -647,7 +647,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
       manager_name: 'Branch Manager',
       tax_number: 'NTN-BR002',
       status: 'active'
-    }, adminLogin.user.id);
+    }, adminLogin.user!.id);
     expect(branch.success).toBe(true);
 
     const cls = ClassRepository.create({
@@ -656,7 +656,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
       class_name: 'Online Sales',
       description: 'Digital commerce department',
       status: 'active'
-    }, adminLogin.user.id);
+    }, adminLogin.user!.id);
     expect(cls.success).toBe(true);
 
     const role = RoleRepository.create({
@@ -664,7 +664,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
       name: 'Branch Reporter',
       description: 'Reports access limited by branch assignment',
       permission_ids: ['PERM-REPORTS-VIEW']
-    }, adminLogin.user.id);
+    }, adminLogin.user!.id);
     expect(role.success).toBe(true);
 
     const user = UserRepository.create({
@@ -675,12 +675,12 @@ describe('SQLite Database Repositories Integration Tests', () => {
       role_id: 'TEST-BRANCH-REPORTER',
       status: 'active',
       branch_id: 'TEST-BR-002'
-    }, adminLogin.user.id);
+    }, adminLogin.user!.id);
     expect(user.success).toBe(true);
     expect(BranchRepository.assignUserBranches('TEST-BRANCH-USER', ['TEST-BR-002'], 'TEST-BR-002')).toBe(true);
 
     const branchLogin = AuthRepository.login('branchreporter', 'branch123');
-    expect(branchLogin.user.branches?.map((row: any) => row.id)).toContain('TEST-BR-002');
+    expect(branchLogin.user!.branches?.map((row: any) => row.id)).toContain('TEST-BR-002');
     expect(BranchRepository.userCanAccessBranch('TEST-BRANCH-USER', 'TEST-BR-002')).toBe(true);
     expect(BranchRepository.userCanAccessBranch('TEST-BRANCH-USER', 'B001')).toBe(false);
     expect(() => AuthRepository.requireBranchAccess(branchLogin.token, 'B001')).toThrow('Unauthorized');
