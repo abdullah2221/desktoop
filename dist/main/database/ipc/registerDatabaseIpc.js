@@ -19,8 +19,12 @@ const quote_handlers_1 = require("./quote.handlers");
 const invoice_handlers_1 = require("./invoice.handlers");
 const invoicePayment_handlers_1 = require("./invoicePayment.handlers");
 const tax_handlers_1 = require("./tax.handlers");
+const bank_handlers_1 = require("./bank.handlers");
+const report_handlers_1 = require("./report.handlers");
+const auth_handlers_1 = require("./auth.handlers");
 function registerDatabaseIpc() {
     console.log('[IPC Registration] Activating secure SQLite database channels...');
+    (0, auth_handlers_1.registerAuthHandlers)();
     (0, product_handlers_1.registerProductHandlers)();
     (0, customer_handlers_1.registerCustomerHandlers)();
     (0, sale_handlers_1.registerSaleHandlers)();
@@ -39,5 +43,7 @@ function registerDatabaseIpc() {
     (0, invoice_handlers_1.registerInvoiceHandlers)();
     (0, invoicePayment_handlers_1.registerInvoicePaymentHandlers)();
     (0, tax_handlers_1.registerTaxHandlers)();
+    (0, bank_handlers_1.registerBankHandlers)();
+    (0, report_handlers_1.registerReportHandlers)();
     console.log('[IPC Registration] Secure database channel binding completed successfully.');
 }

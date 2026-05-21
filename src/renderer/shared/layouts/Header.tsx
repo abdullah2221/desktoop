@@ -4,18 +4,23 @@ import {
   User as UserIcon, 
   Calendar, 
   Clock 
+  ,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 
 interface HeaderProps {
   storeName?: string;
-  activeUser?: { username: string; role: string };
+  activeUser?: { username: string; fullName?: string; email?: string; role: string; branchId?: string };
   appVersion?: string;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   storeName = 'Al-Hamd General Store',
   activeUser = { username: 'Admin User', role: 'ADMIN' },
-  appVersion = '1.0.0'
+  appVersion = '1.0.0',
+  onLogout
 }) => {
   const [time, setTime] = useState(new Date());
 
@@ -41,6 +46,14 @@ export const Header: React.FC<HeaderProps> = ({
       hour12: true
     });
   };
+
+  const displayName = activeUser.fullName || activeUser.username;
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'U';
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 shadow-sm">
@@ -74,18 +87,27 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* User Card */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-[4px] bg-primary-light flex items-center justify-center border border-primary-blue/20">
-            <UserIcon className="w-4 h-4 text-primary-blue" />
+          <div className="w-9 h-9 rounded-[4px] bg-primary-blue text-white flex items-center justify-center border border-primary-blue/20 text-xs font-bold">
+            {initials || <UserIcon className="w-4 h-4" />}
           </div>
           <div className="text-left">
-            <span className="text-[9px] font-bold text-primary-blue uppercase tracking-wider block bg-primary-light/80 px-1 py-0.25 rounded-[2px]">
-              {activeUser.role}
-            </span>
-            <span className="text-xs font-bold text-slate-800 leading-none block mt-0.5">{activeUser.username}</span>
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] font-bold text-primary-blue uppercase tracking-wider bg-primary-light/80 px-1 py-0.25 rounded-[2px] inline-flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                {activeUser.role}
+              </span>
+              {activeUser.branchId && <span className="text-[9px] text-slate-400 font-bold">{activeUser.branchId}</span>}
+            </div>
+            <span className="text-xs font-bold text-slate-800 leading-none block mt-0.5">{displayName}</span>
+            {activeUser.email && <span className="text-[10px] text-slate-500 leading-none block mt-0.5">{activeUser.email}</span>}
           </div>
+          {onLogout && (
+            <button className="ml-2 p-2 rounded-[4px] border border-slate-200 text-slate-500 hover:bg-slate-50" onClick={onLogout} title="Logout">
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </header>
   );
 };
-

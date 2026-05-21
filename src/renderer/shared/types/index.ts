@@ -80,7 +80,16 @@ export interface Customer {
 export interface User {
   id: string;
   username: string;
-  role: 'ADMIN' | 'MANAGER' | 'CASHIER';
+  full_name?: string;
+  email?: string;
+  role_id?: string;
+  role?: string;
+  role_name?: string;
+  status?: 'active' | 'inactive';
+  last_login?: string;
+  branch_id?: string;
+  permissions?: string[];
+  created_at?: string;
 }
 
 export interface Tenant {
@@ -302,4 +311,73 @@ export interface TaxRate {
   status: 'active' | 'inactive';
   created_at?: string;
   updated_at?: string;
+}
+
+export type BankAccountType = 'Cash' | 'Bank' | 'EasyPaisa' | 'JazzCash';
+export type MoneyTransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'BANK_CHARGE' | 'ADJUSTMENT';
+export type PaymentMethod = 'Cash' | 'Bank' | 'EasyPaisa' | 'JazzCash' | 'Card' | 'Cheque';
+
+export interface BankAccount {
+  id: string;
+  code: string;
+  name: string;
+  account_type: BankAccountType;
+  linked_gl_account_id: string;
+  opening_balance: number;
+  current_balance: number;
+  status: 'active' | 'inactive';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MoneyTransaction {
+  id: string;
+  tenant_id: string;
+  branch_id: string;
+  account_id: string;
+  account_name?: string;
+  account_code?: string;
+  transaction_date: string;
+  transaction_type: MoneyTransactionType;
+  amount: number;
+  offset_gl_account_id?: string;
+  reference_no?: string;
+  notes?: string;
+  counter_account_id?: string;
+  is_cleared: number;
+  cleared_at?: string;
+  created_at?: string;
+}
+
+export interface BankReconciliation {
+  id: string;
+  account_id: string;
+  account_name?: string;
+  account_code?: string;
+  start_date: string;
+  end_date: string;
+  statement_balance: number;
+  book_balance: number;
+  difference: number;
+  status: 'draft' | 'completed';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BankReconciliationItem {
+  id: string;
+  reconciliation_id: string;
+  transaction_id: string;
+  transaction_date: string;
+  transaction_type: MoneyTransactionType;
+  amount: number;
+  cleared_amount: number;
+  reference_no?: string;
+}
+
+export interface PaymentMethodAccount {
+  payment_method: PaymentMethod;
+  account_id: string | null;
+  account_name?: string;
+  account_code?: string;
 }

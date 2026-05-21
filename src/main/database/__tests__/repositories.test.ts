@@ -14,6 +14,13 @@ import { InvoiceRepository } from '../repositories/InvoiceRepository';
 import { InvoicePaymentRepository } from '../repositories/InvoicePaymentRepository';
 import { TaxCalculationService } from '../repositories/TaxCalculationService';
 import { TaxRepository } from '../repositories/TaxRepository';
+import { BankAccountRepository } from '../repositories/BankAccountRepository';
+import { MoneyTransactionRepository } from '../repositories/MoneyTransactionRepository';
+import { BankReconciliationRepository } from '../repositories/BankReconciliationRepository';
+import { ReportRepository } from '../repositories/ReportRepository';
+import { SupplierRepository } from '../repositories/SupplierRepository';
+import { AuthRepository } from '../repositories/AuthRepository';
+import { UserRepository } from '../repositories/UserRepository';
 import * as fs from 'fs';
 
 describe('SQLite Database Repositories Integration Tests', () => {
@@ -22,6 +29,12 @@ describe('SQLite Database Repositories Integration Tests', () => {
     db.pragma('foreign_keys = OFF');
 
     const tables = [
+      'bank_reconciliation_items',
+      'bank_reconciliations',
+      'money_transactions',
+      'payment_method_accounts',
+      'cash_bank_accounts',
+      'user_sessions',
       'journal_entry_lines',
       'journal_entries',
       'chart_of_accounts',
@@ -340,5 +353,184 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(input.some((r) => r.tax_code === 'GST-17' && Number(r.tax_amount) >= 170)).toBe(true);
     expect(summary.outputTax).toBeGreaterThan(0);
     expect(summary.inputTax).toBeGreaterThan(0);
+  });
+
+  it('should manage bank accounts, money movement, reconciliation, and accounting postings', () => {
+    const db = getDatabase();
+    const today = new Date().toISOString().split('T')[0];
+
+    const bank = BankAccountRepository.create({
+      id: 'TEST-CBA-BANK',
+      code: 'TEST-BANK',
+      name: 'Test Operating Bank',
+      account_type: 'Bank',
+      linked_gl_account_id: 'ACC-1010',
+      opening_balance: 10000,
+      status: 'active'
+    });
+    expect(bank.success).toBe(true);
+
+    const cash = BankAccountRepository.create({
+      id: 'TEST-CBA-CASH',
+      code: 'TEST-CASH',
+      name: 'Test Petty Cash',
+      account_type: 'Cash',
+      linked_gl_account_id: 'ACC-1000',
+      opening_balance: 0,
+      status: 'active'
+    });
+    expect(cash.success).toBe(true);
+
+    const deposit = MoneyTransactionRepository.createDeposit({
+      account_id: 'TEST-CBA-BANK',
+      transaction_date: today,
+      amount: 2000,
+      offset_gl_account_id: 'ACC-3000',
+      reference_no: 'DEP-1'
+    });
+    expect(deposit.success).toBe(true);
+
+    const withdrawal = MoneyTransactionRepository.createWithdrawal({
+      account_id: 'TEST-CBA-BANK',
+      transaction_date: today,
+      amount: 500,
+      offset_gl_account_id: 'ACC-3000',
+      reference_no: 'WDL-1'
+    });
+    expect(withdrawal.success).toBe(true);
+
+    const transfer = MoneyTransactionRepository.createTransfer({
+      from_account_id: 'TEST-CBA-BANK',
+      to_account_id: 'TEST-CBA-CASH',
+      transaction_date: today,
+      amount: 1000,
+      reference_no: 'TRF-1'
+    });
+    expect(transfer.success).toBe(true);
+
+    const bankCharge = MoneyTransactionRepository.createBankCharge({
+      account_id: 'TEST-CBA-BANK',
+      transaction_date: today,
+      amount: 50,
+      reference_no: 'CHG-1'
+    });
+    expect(bankCharge.success).toBe(true);
+
+    const balances = BankAccountRepository.getAll() as Array<{ id: string; current_balance: number }>;
+    expect(balances.find((a) => a.id === 'TEST-CBA-BANK')?.current_balance).toBe(10450);
+    expect(balances.find((a) => a.id === 'TEST-CBA-CASH')?.current_balance).toBe(1000);
+
+    const worksheet = BankReconciliationRepository.createWorksheet({
+      account_id: 'TEST-CBA-BANK',
+      start_date: today,
+      end_date: today,
+      statement_balance: 10425
+    });
+    expect(worksheet.success).toBe(true);
+    expect(worksheet.book_balance).toBe(10450);
+    expect(worksheet.difference).toBe(-25);
+
+    const items = BankReconciliationRepository.getItems(worksheet.id as string) as Array<{ transaction_id: string }>;
+    expect(items.length).toBeGreaterThanOrEqual(4);
+    expect(BankReconciliationRepository.markItemsCleared(worksheet.id as string, items.map((item) => item.transaction_id))).toBe(true);
+
+    const clearedCount = (db.prepare('SELECT COUNT(*) as count FROM money_transactions WHERE account_id = ? AND is_cleared = 1').get('TEST-CBA-BANK') as { count: number }).count;
+    expect(clearedCount).toBeGreaterThanOrEqual(4);
+
+    const bankChargeExpenseLine = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM journal_entry_lines jl
+      JOIN journal_entries je ON je.id = jl.journal_entry_id
+      WHERE je.reference_type = 'MONEY_TRANSACTION'
+        AND je.reference_id = ?
+        AND jl.account_id = 'ACC-6300'
+        AND jl.debit = 50
+    `).get(bankCharge.id) as { count: number };
+    expect(bankChargeExpenseLine.count).toBe(1);
+
+    const transferJournal = (db.prepare("SELECT COUNT(*) as count FROM journal_entries WHERE reference_type = 'TRANSFER' AND reference_id = ?").get(transfer.id) as { count: number }).count;
+    const openingJournal = (db.prepare("SELECT COUNT(*) as count FROM journal_entries WHERE reference_type = 'BANK_ACCOUNT_OPENING' AND reference_id = 'TEST-CBA-BANK'").get() as { count: number }).count;
+    expect(transferJournal).toBe(1);
+    expect(openingJournal).toBe(1);
+
+    expect(BankAccountRepository.mapPaymentMethod('EasyPaisa', 'TEST-CBA-BANK')).toBe(true);
+    const mappings = BankAccountRepository.getPaymentMethodMappings() as Array<{ payment_method: string; account_id: string | null }>;
+    expect(mappings.find((m) => m.payment_method === 'EasyPaisa')?.account_id).toBe('TEST-CBA-BANK');
+  });
+
+  it('should produce financial reports from ledger and operating balances', () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    const profitAndLoss = ReportRepository.profitAndLoss({ dateFrom: '2000-01-01', dateTo: today });
+    expect(profitAndLoss.totalIncome).toBeGreaterThan(0);
+    expect(profitAndLoss.totalExpenses).toBeGreaterThan(0);
+    expect(profitAndLoss.netIncome).toBeCloseTo(profitAndLoss.totalIncome - profitAndLoss.totalExpenses, 2);
+
+    const balanceSheet = ReportRepository.balanceSheet(today);
+    expect(balanceSheet.totalAssets).toBeGreaterThan(0);
+    expect(balanceSheet.totalLiabilitiesAndEquity).toBeGreaterThan(0);
+    expect(balanceSheet.difference).toBeCloseTo(0, 2);
+
+    const trialBalance = ReportRepository.trialBalance({ dateFrom: '2000-01-01', dateTo: today });
+    expect(trialBalance.totalDebit).toBeGreaterThan(0);
+    expect(trialBalance.totalCredit).toBeGreaterThan(0);
+    expect(trialBalance.totalDebit).toBeCloseTo(trialBalance.totalCredit, 2);
+
+    const inventory = ReportRepository.inventoryValuation();
+    expect(inventory.totalQuantity).toBeGreaterThan(0);
+    expect(inventory.totalValue).toBeGreaterThan(0);
+
+    CustomerRepository.createOrIncrementCredit('TEST-Report AR Customer', 900, 900, today);
+    SupplierRepository.create({ id: 'TEST-REPORT-AP', name: 'TEST Report AP Supplier', opening_balance: 700, status: 'active' });
+
+    const arAging = ReportRepository.arAging(today);
+    const apAging = ReportRepository.apAging(today);
+    expect(arAging.totals.total).toBeGreaterThanOrEqual(900);
+    expect(apAging.totals.total).toBeGreaterThanOrEqual(700);
+
+    const taxSummary = ReportRepository.taxSummary({ dateFrom: '2000-01-01', dateTo: today });
+    expect(taxSummary.summary.outputTax).toBeGreaterThan(0);
+    expect(taxSummary.summary.inputTax).toBeGreaterThan(0);
+  });
+
+  it('should authenticate users, hash passwords, assign roles, and enforce permissions', () => {
+    const adminLogin = AuthRepository.login('admin', 'admin123');
+    expect(adminLogin.token).toBeTruthy();
+    expect(adminLogin.user.username).toBe('admin');
+    expect(adminLogin.user.permissions).toContain('users.manage');
+
+    expect(() => AuthRepository.login('admin', 'wrong-password')).toThrow('Invalid username or password.');
+
+    const cashier = UserRepository.create({
+      id: 'TEST-CASHIER-USER',
+      username: 'testcashier',
+      full_name: 'Test Cashier',
+      email: 'cashier@example.local',
+      password: 'cashier123',
+      role_id: 'R003',
+      status: 'active',
+      branch_id: 'B001'
+    }, adminLogin.user.id);
+    expect(cashier.success).toBe(true);
+
+    const db = getDatabase();
+    const stored = db.prepare('SELECT password_hash, role_id FROM users WHERE id=?').get('TEST-CASHIER-USER') as { password_hash: string; role_id: string };
+    expect(stored.password_hash).not.toBe('cashier123');
+    expect(stored.password_hash.startsWith('pbkdf2$')).toBe(true);
+    expect(stored.role_id).toBe('R003');
+
+    const cashierLogin = AuthRepository.login('testcashier', 'cashier123');
+    expect(cashierLogin.user.permissions).toContain('pos.sale.create');
+    expect(AuthRepository.hasPermission(cashierLogin.token, 'pos.sale.create')).toBe(true);
+    expect(AuthRepository.hasPermission(cashierLogin.token, 'reports.view')).toBe(false);
+    expect(() => AuthRepository.requirePermission(cashierLogin.token, 'reports.view')).toThrow('Unauthorized');
+    expect(() => AuthRepository.requirePermission(null, 'users.manage')).toThrow('Unauthorized');
+
+    expect(UserRepository.resetPassword('TEST-CASHIER-USER', 'newCashier123', adminLogin.user.id)).toBe(true);
+    expect(() => AuthRepository.login('testcashier', 'cashier123')).toThrow('Invalid username or password.');
+    expect(AuthRepository.login('testcashier', 'newCashier123').user.username).toBe('testcashier');
+
+    expect(UserRepository.deactivate('TEST-CASHIER-USER', adminLogin.user.id)).toBe(true);
+    expect(() => AuthRepository.login('testcashier', 'newCashier123')).toThrow('Invalid username or password.');
   });
 });

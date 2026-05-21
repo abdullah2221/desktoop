@@ -11,31 +11,38 @@ import {
   BookOpen
   ,
   FileText,
-  Percent
+  Percent,
+  Landmark,
+  ClipboardList
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  hasPermission?: (permission: string) => boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
-  onTabChange
+  onTabChange,
+  hasPermission = () => true
 }) => {
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'pos', label: 'POS Billing', icon: CreditCard, badge: 'Active' },
-    { id: 'inventory', label: 'Inventory', icon: Layers },
-    { id: 'purchases', label: 'Purchases / Stock In', icon: ShoppingBag },
-    { id: 'suppliers', label: 'Suppliers / Vendors', icon: Users },
-    { id: 'customers', label: 'Customers / Udhaar', icon: Users },
-    { id: 'sales', label: 'Sales Invoices', icon: FileText },
-    { id: 'taxes', label: 'Taxes', icon: Percent },
-    { id: 'expenses', label: 'Expense Ledger', icon: Coins },
-    { id: 'accounting', label: 'Accounting', icon: BookOpen },
-    { id: 'settings', label: 'Store Settings', icon: Settings }
-  ];
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, permission: null },
+    { id: 'pos', label: 'POS Billing', icon: CreditCard, badge: 'Active', permission: 'pos.sale.create' },
+    { id: 'inventory', label: 'Inventory', icon: Layers, permission: 'inventory.product.edit' },
+    { id: 'purchases', label: 'Purchases / Stock In', icon: ShoppingBag, permission: 'purchase.create' },
+    { id: 'suppliers', label: 'Suppliers / Vendors', icon: Users, permission: 'supplier.edit' },
+    { id: 'customers', label: 'Customers / Udhaar', icon: Users, permission: 'pos.sale.create' },
+    { id: 'sales', label: 'Sales Invoices', icon: FileText, permission: 'pos.sale.create' },
+    { id: 'taxes', label: 'Taxes', icon: Percent, permission: 'taxes.manage' },
+    { id: 'banking', label: 'Banking', icon: Landmark, permission: 'banking.manage' },
+    { id: 'expenses', label: 'Expense Ledger', icon: Coins, permission: 'purchase.create' },
+    { id: 'accounting', label: 'Accounting', icon: BookOpen, permission: 'accounting.journal.create' },
+    { id: 'reports', label: 'Reports', icon: ClipboardList, permission: 'reports.view' },
+    { id: 'users', label: 'Users & Roles', icon: Settings, permission: 'users.manage' },
+    { id: 'settings', label: 'Store Settings', icon: Settings, permission: 'settings.edit' }
+  ].filter((item) => !item.permission || hasPermission(item.permission));
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm">

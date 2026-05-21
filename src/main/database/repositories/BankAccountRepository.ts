@@ -1,5 +1,6 @@
 import { getDatabase } from '../connection';
 import { AuditLogRepository } from './AuditLogRepository';
+import { JournalRepository } from './JournalRepository';
 
 export interface BankAccountPayload {
   id?: string;
@@ -20,21 +21,42 @@ export class BankAccountRepository {
   static create(payload: BankAccountPayload) {
     const db = getDatabase();
     const id = payload.id || `CBA-${Date.now()}`;
-    const info = db.prepare(`
-      INSERT INTO cash_bank_accounts (
-        id, code, name, account_type, linked_gl_account_id, opening_balance, current_balance, status
-      ) VALUES (
-        @id, @code, @name, @account_type, @linked_gl_account_id, @opening_balance, @opening_balance, @status
-      )
-    `).run({
-      id,
-      code: payload.code,
-      name: payload.name,
-      account_type: payload.account_type,
-      linked_gl_account_id: payload.linked_gl_account_id,
-      opening_balance: payload.opening_balance || 0,
-      status: payload.status || 'active'
+    const tx = db.transaction((data: BankAccountPayload) => {
+      const openingBalance = Number(data.opening_balance) || 0;
+      const info = db.prepare(`
+        INSERT INTO cash_bank_accounts (
+          id, code, name, account_type, linked_gl_account_id, opening_balance, current_balance, status
+        ) VALUES (
+          @id, @code, @name, @account_type, @linked_gl_account_id, @opening_balance, @opening_balance, @status
+        )
+      `).run({
+        id,
+        code: data.code,
+        name: data.name,
+        account_type: data.account_type,
+        linked_gl_account_id: data.linked_gl_account_id,
+        opening_balance: openingBalance,
+        status: data.status || 'active'
+      });
+
+      if (info.changes > 0 && openingBalance > 0) {
+        JournalRepository.createJournal({
+          entry_no: `AUTO-CBA-OPEN-${Date.now()}`,
+          entry_date: new Date().toISOString().split('T')[0],
+          description: `Opening balance for ${data.code}`,
+          reference_type: 'BANK_ACCOUNT_OPENING',
+          reference_id: id,
+          lines: [
+            { account_id: data.linked_gl_account_id, description: 'Opening bank/cash balance', debit: openingBalance, credit: 0 },
+            { account_id: 'ACC-3000', description: 'Opening balance equity', debit: 0, credit: openingBalance }
+          ]
+        });
+      }
+
+      return info;
     });
+
+    const info = tx(payload);
 
     if (info.changes > 0) {
       AuditLogRepository.write({ action: 'BANK_ACCOUNT_CREATE', details: `Bank/Cash account ${id} created` });

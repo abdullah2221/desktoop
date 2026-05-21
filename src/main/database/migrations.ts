@@ -85,7 +85,12 @@ function runSchemaBootstrap() {
       tenant_id TEXT NOT NULL,
       branch_id TEXT NOT NULL,
       username TEXT NOT NULL UNIQUE,
+      full_name TEXT,
+      email TEXT,
+      password_hash TEXT,
       role_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_login TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -554,6 +559,17 @@ function runSchemaBootstrap() {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (account_id) REFERENCES cash_bank_accounts(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      last_seen_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 }
 
@@ -613,6 +629,11 @@ function runBackfillAndAlters() {
   addColumn('categories', 'status TEXT DEFAULT "active"');
   addColumn('units', 'status TEXT DEFAULT "active"');
   addColumn('brands', 'status TEXT DEFAULT "active"');
+  addColumn('users', 'full_name TEXT');
+  addColumn('users', 'email TEXT');
+  addColumn('users', 'password_hash TEXT');
+  addColumn('users', 'status TEXT DEFAULT "active"');
+  addColumn('users', 'last_login TEXT');
 
   if (!hasColumn('products', 'sku')) {
     addColumn('products', 'sku TEXT');
@@ -642,6 +663,9 @@ function runBackfillAndAlters() {
   createIndex('idx_money_transactions_account_date', 'money_transactions', 'account_id, transaction_date');
   createIndex('idx_money_transactions_cleared', 'money_transactions', 'is_cleared');
   createIndex('idx_bank_reconciliations_account', 'bank_reconciliations', 'account_id');
+  createIndex('idx_users_role', 'users', 'role_id');
+  createIndex('idx_user_sessions_token', 'user_sessions', 'token_hash');
+  createIndex('idx_user_sessions_user', 'user_sessions', 'user_id');
 
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_sku_unique ON products(sku)');
 }
@@ -652,6 +676,61 @@ function seedDefaults() {
   try {
     db.exec(`
       INSERT OR IGNORE INTO tenants (id, name) VALUES ('T001', 'Default Tenant');
+
+      INSERT OR IGNORE INTO branches (id, tenant_id, name) VALUES ('B001', 'T001', 'Main Branch');
+
+      INSERT OR IGNORE INTO roles (id, name, description) VALUES
+      ('R001', 'Owner/Admin', 'Full system access'),
+      ('R002', 'Manager', 'Operational access for inventory, purchasing, suppliers, and POS'),
+      ('R003', 'Cashier', 'POS checkout access'),
+      ('R004', 'Accountant', 'Accounting, tax, banking, and reporting access');
+
+      INSERT OR IGNORE INTO permissions (id, name, description) VALUES
+      ('PERM-POS-SALE-CREATE', 'pos.sale.create', 'Create POS sales'),
+      ('PERM-INVENTORY-PRODUCT-EDIT', 'inventory.product.edit', 'Create and edit inventory products'),
+      ('PERM-PURCHASE-CREATE', 'purchase.create', 'Create purchase documents'),
+      ('PERM-SUPPLIER-EDIT', 'supplier.edit', 'Create and edit suppliers'),
+      ('PERM-REPORTS-VIEW', 'reports.view', 'View financial and operating reports'),
+      ('PERM-ACCOUNTING-JOURNAL-CREATE', 'accounting.journal.create', 'Create accounting journals'),
+      ('PERM-SETTINGS-EDIT', 'settings.edit', 'Edit store settings'),
+      ('PERM-USERS-MANAGE', 'users.manage', 'Manage users, roles, and permissions'),
+      ('PERM-BANKING-MANAGE', 'banking.manage', 'Manage bank and cash transactions'),
+      ('PERM-TAXES-MANAGE', 'taxes.manage', 'Manage tax setup and reports');
+
+      INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+      SELECT 'R001', id FROM permissions;
+
+      INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES
+      ('R002', 'PERM-POS-SALE-CREATE'),
+      ('R002', 'PERM-INVENTORY-PRODUCT-EDIT'),
+      ('R002', 'PERM-PURCHASE-CREATE'),
+      ('R002', 'PERM-SUPPLIER-EDIT'),
+      ('R002', 'PERM-REPORTS-VIEW'),
+      ('R003', 'PERM-POS-SALE-CREATE'),
+      ('R004', 'PERM-REPORTS-VIEW'),
+      ('R004', 'PERM-ACCOUNTING-JOURNAL-CREATE'),
+      ('R004', 'PERM-BANKING-MANAGE'),
+      ('R004', 'PERM-TAXES-MANAGE');
+
+      INSERT OR IGNORE INTO users (
+        id, tenant_id, branch_id, username, full_name, email, password_hash, role_id, status
+      ) VALUES (
+        'U001', 'T001', 'B001', 'admin', 'Kashif Ali', 'admin@example.local',
+        'pbkdf2$120000$67f0fa400a81e4e3f3562f6bfe395458$4005b21c659ff66a38ad47d313474e11f4da5cd2d43fdaaaf9abe548e29a1277',
+        'R001', 'active'
+      );
+
+      UPDATE roles SET name='Owner/Admin', description='Full system access' WHERE id='R001';
+      UPDATE roles SET name='Manager', description='Operational access for inventory, purchasing, suppliers, and POS' WHERE id='R002';
+      UPDATE roles SET name='Cashier', description='POS checkout access' WHERE id='R003';
+      UPDATE users
+      SET username='admin',
+          full_name=COALESCE(full_name, 'Kashif Ali'),
+          email=COALESCE(email, 'admin@example.local'),
+          password_hash=COALESCE(password_hash, 'pbkdf2$120000$67f0fa400a81e4e3f3562f6bfe395458$4005b21c659ff66a38ad47d313474e11f4da5cd2d43fdaaaf9abe548e29a1277'),
+          role_id='R001',
+          status=COALESCE(status, 'active')
+      WHERE id='U001';
 
       INSERT OR IGNORE INTO units (id, tenant_id, name, abbreviation, status) VALUES
       ('U001', 'T001', 'Pieces', 'pcs', 'active'),

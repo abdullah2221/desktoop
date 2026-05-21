@@ -6,7 +6,7 @@
   "scripts": {
     "dev:renderer": "vite",
     "dev:main": "tsc -p tsconfig.main.json -w",
-    "dev:electron": "cp database/bin/better_sqlite3_electron.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && wait-on http://localhost:5173 && electron .",
+    "dev:electron": "npm run build:main && cp database/bin/better_sqlite3_electron.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && wait-on http://localhost:5173 && electron .",
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\" \"npm run dev:electron\"",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",

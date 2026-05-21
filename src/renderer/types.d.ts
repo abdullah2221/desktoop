@@ -1,7 +1,14 @@
-import type { Account, Brand, Category, Expense, Invoice, InvoicePayment, JournalEntry, Product, Purchase, Quote, Supplier, SupplierPayment, Unit } from './shared/types';
+import type { Account, BankAccount, BankReconciliation, BankReconciliationItem, Brand, Category, Expense, Invoice, InvoicePayment, JournalEntry, MoneyTransaction, PaymentMethodAccount, Product, Purchase, Quote, Supplier, SupplierPayment, Unit } from './shared/types';
 
 export interface IElectronAPI {
   getAppVersion: () => Promise<string>;
+  auth: {
+    setSessionToken: (token: string | null) => void;
+    login: (username: string, password: string) => Promise<{ token: string; expires_at: string; user: User }>;
+    logout: () => Promise<boolean>;
+    getCurrentUser: () => Promise<User | null>;
+    hasPermission: (permission: string) => Promise<boolean>;
+  };
   products: {
     getAll: () => Promise<Product[]>;
     getById: (id: string) => Promise<Product>;
@@ -125,6 +132,57 @@ export interface IElectronAPI {
     getOutputReport: (dateFrom: string, dateTo: string) => Promise<Array<Record<string, unknown>>>;
     getInputReport: (dateFrom: string, dateTo: string) => Promise<Array<Record<string, unknown>>>;
     getSummaryReport: (dateFrom: string, dateTo: string) => Promise<{ outputTax: number; inputTax: number; netPayable: number }>;
+  };
+  bankAccounts: {
+    getAll: () => Promise<BankAccount[]>;
+    create: (payload: Partial<BankAccount>) => Promise<{ success: boolean; id?: string }>;
+    update: (payload: Partial<BankAccount>) => Promise<boolean>;
+    deactivate: (id: string) => Promise<boolean>;
+    getPaymentMethodMappings: () => Promise<PaymentMethodAccount[]>;
+    mapPaymentMethod: (paymentMethod: string, accountId: string | null) => Promise<boolean>;
+  };
+  moneyTransactions: {
+    getAll: () => Promise<MoneyTransaction[]>;
+    getByAccount: (accountId: string) => Promise<MoneyTransaction[]>;
+    createDeposit: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
+    createWithdrawal: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
+    createTransfer: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
+    createBankCharge: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
+    createAdjustment: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
+    markCleared: (transactionId: string, cleared: boolean) => Promise<boolean>;
+  };
+  bankReconciliations: {
+    getAll: () => Promise<BankReconciliation[]>;
+    createWorksheet: (payload: unknown) => Promise<{ success: boolean; id?: string; book_balance: number; difference: number }>;
+    getItems: (reconciliationId: string) => Promise<BankReconciliationItem[]>;
+    markItemsCleared: (reconciliationId: string, transactionIds: string[]) => Promise<boolean>;
+  };
+  reports: {
+    profitAndLoss: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    balanceSheet: (dateTo: string) => Promise<Record<string, any>>;
+    cashFlow: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    trialBalance: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    generalLedger: (dateFrom: string, dateTo: string) => Promise<Array<Record<string, any>>>;
+    arAging: (dateTo: string) => Promise<Record<string, any>>;
+    apAging: (dateTo: string) => Promise<Record<string, any>>;
+    inventoryValuation: () => Promise<Record<string, any>>;
+    taxSummary: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    salesByCustomerProduct: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    purchasesBySupplierProduct: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    expenseSummary: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+  };
+  users: {
+    getAll: () => Promise<User[]>;
+    create: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
+    update: (payload: unknown) => Promise<boolean>;
+    deactivate: (id: string) => Promise<boolean>;
+    resetPassword: (id: string, password: string) => Promise<boolean>;
+  };
+  roles: {
+    getAll: () => Promise<Array<Record<string, any>>>;
+    getPermissions: () => Promise<Array<Record<string, any>>>;
+    create: (payload: unknown) => Promise<{ success: boolean; id?: string }>;
+    update: (payload: unknown) => Promise<boolean>;
   };
 }
 

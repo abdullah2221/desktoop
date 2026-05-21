@@ -1,9 +1,25 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
+let sessionToken = null;
 // Expose safe APIs to the renderer process
 electron_1.contextBridge.exposeInMainWorld('api', {
     getAppVersion: () => electron_1.ipcRenderer.invoke('get-app-version'),
+    auth: {
+        setSessionToken: (token) => { sessionToken = token; },
+        login: async (username, password) => {
+            const result = await electron_1.ipcRenderer.invoke('auth:login', username, password);
+            sessionToken = result.token;
+            return result;
+        },
+        logout: async () => {
+            const result = await electron_1.ipcRenderer.invoke('auth:logout', sessionToken);
+            sessionToken = null;
+            return result;
+        },
+        getCurrentUser: () => electron_1.ipcRenderer.invoke('auth:getCurrentUser', sessionToken),
+        hasPermission: (permission) => electron_1.ipcRenderer.invoke('auth:hasPermission', sessionToken, permission),
+    },
     // SECURE SQLITE DATABASE APIS
     products: {
         getAll: () => electron_1.ipcRenderer.invoke('products:getAll'),
@@ -113,5 +129,56 @@ electron_1.contextBridge.exposeInMainWorld('api', {
         getOutputReport: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('taxes:getOutputReport', dateFrom, dateTo),
         getInputReport: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('taxes:getInputReport', dateFrom, dateTo),
         getSummaryReport: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('taxes:getSummaryReport', dateFrom, dateTo),
+    },
+    bankAccounts: {
+        getAll: () => electron_1.ipcRenderer.invoke('bankAccounts:getAll'),
+        create: (payload) => electron_1.ipcRenderer.invoke('bankAccounts:create', payload),
+        update: (payload) => electron_1.ipcRenderer.invoke('bankAccounts:update', payload),
+        deactivate: (id) => electron_1.ipcRenderer.invoke('bankAccounts:deactivate', id),
+        getPaymentMethodMappings: () => electron_1.ipcRenderer.invoke('bankAccounts:getPaymentMethodMappings'),
+        mapPaymentMethod: (paymentMethod, accountId) => electron_1.ipcRenderer.invoke('bankAccounts:mapPaymentMethod', paymentMethod, accountId),
+    },
+    moneyTransactions: {
+        getAll: () => electron_1.ipcRenderer.invoke('moneyTransactions:getAll'),
+        getByAccount: (accountId) => electron_1.ipcRenderer.invoke('moneyTransactions:getByAccount', accountId),
+        createDeposit: (payload) => electron_1.ipcRenderer.invoke('moneyTransactions:createDeposit', payload),
+        createWithdrawal: (payload) => electron_1.ipcRenderer.invoke('moneyTransactions:createWithdrawal', payload),
+        createTransfer: (payload) => electron_1.ipcRenderer.invoke('moneyTransactions:createTransfer', payload),
+        createBankCharge: (payload) => electron_1.ipcRenderer.invoke('moneyTransactions:createBankCharge', payload),
+        createAdjustment: (payload) => electron_1.ipcRenderer.invoke('moneyTransactions:createAdjustment', payload),
+        markCleared: (transactionId, cleared) => electron_1.ipcRenderer.invoke('moneyTransactions:markCleared', transactionId, cleared),
+    },
+    bankReconciliations: {
+        getAll: () => electron_1.ipcRenderer.invoke('bankReconciliations:getAll'),
+        createWorksheet: (payload) => electron_1.ipcRenderer.invoke('bankReconciliations:createWorksheet', payload),
+        getItems: (reconciliationId) => electron_1.ipcRenderer.invoke('bankReconciliations:getItems', reconciliationId),
+        markItemsCleared: (reconciliationId, transactionIds) => electron_1.ipcRenderer.invoke('bankReconciliations:markItemsCleared', reconciliationId, transactionIds),
+    },
+    reports: {
+        profitAndLoss: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:profitAndLoss', sessionToken, dateFrom, dateTo),
+        balanceSheet: (dateTo) => electron_1.ipcRenderer.invoke('reports:balanceSheet', sessionToken, dateTo),
+        cashFlow: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:cashFlow', sessionToken, dateFrom, dateTo),
+        trialBalance: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:trialBalance', sessionToken, dateFrom, dateTo),
+        generalLedger: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:generalLedger', sessionToken, dateFrom, dateTo),
+        arAging: (dateTo) => electron_1.ipcRenderer.invoke('reports:arAging', sessionToken, dateTo),
+        apAging: (dateTo) => electron_1.ipcRenderer.invoke('reports:apAging', sessionToken, dateTo),
+        inventoryValuation: () => electron_1.ipcRenderer.invoke('reports:inventoryValuation', sessionToken),
+        taxSummary: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:taxSummary', sessionToken, dateFrom, dateTo),
+        salesByCustomerProduct: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:salesByCustomerProduct', sessionToken, dateFrom, dateTo),
+        purchasesBySupplierProduct: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:purchasesBySupplierProduct', sessionToken, dateFrom, dateTo),
+        expenseSummary: (dateFrom, dateTo) => electron_1.ipcRenderer.invoke('reports:expenseSummary', sessionToken, dateFrom, dateTo),
+    },
+    users: {
+        getAll: () => electron_1.ipcRenderer.invoke('users:getAll', sessionToken),
+        create: (payload) => electron_1.ipcRenderer.invoke('users:create', sessionToken, payload),
+        update: (payload) => electron_1.ipcRenderer.invoke('users:update', sessionToken, payload),
+        deactivate: (id) => electron_1.ipcRenderer.invoke('users:deactivate', sessionToken, id),
+        resetPassword: (id, password) => electron_1.ipcRenderer.invoke('users:resetPassword', sessionToken, id, password),
+    },
+    roles: {
+        getAll: () => electron_1.ipcRenderer.invoke('roles:getAll', sessionToken),
+        getPermissions: () => electron_1.ipcRenderer.invoke('roles:getPermissions', sessionToken),
+        create: (payload) => electron_1.ipcRenderer.invoke('roles:create', sessionToken, payload),
+        update: (payload) => electron_1.ipcRenderer.invoke('roles:update', sessionToken, payload),
     }
 });

@@ -16,9 +16,13 @@ import { registerQuoteHandlers } from './quote.handlers';
 import { registerInvoiceHandlers } from './invoice.handlers';
 import { registerInvoicePaymentHandlers } from './invoicePayment.handlers';
 import { registerTaxHandlers } from './tax.handlers';
+import { registerBankHandlers } from './bank.handlers';
+import { registerReportHandlers } from './report.handlers';
+import { registerAuthHandlers } from './auth.handlers';
 
 export function registerDatabaseIpc() {
   console.log('[IPC Registration] Activating secure SQLite database channels...');
+  registerAuthHandlers();
   registerProductHandlers();
   registerCustomerHandlers();
   registerSaleHandlers();
@@ -37,5 +41,7 @@ export function registerDatabaseIpc() {
   registerInvoiceHandlers();
   registerInvoicePaymentHandlers();
   registerTaxHandlers();
+  registerBankHandlers();
+  registerReportHandlers();
   console.log('[IPC Registration] Secure database channel binding completed successfully.');
 }

@@ -25,7 +25,9 @@ interface ErpContextType {
   storeNTN: string;
   appVersion: string;
   activeTab: string;
-  activeUser: User;
+  activeUser: User | null;
+  isAuthenticated: boolean;
+  authLoading: boolean;
   
   // Actions
   setActiveTab: (tab: string) => void;
@@ -37,7 +39,11 @@ interface ErpContextType {
   setStorePhone: (phone: string) => void;
   setStoreAddress: (address: string) => void;
   setStoreNTN: (ntn: string) => void;
-  notify: (type: 'success' | 'error', message: string) => void;
+  notify: (type: 'success' | 'error' | 'info', message: string) => void;
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  hasPermission: (permission: string) => boolean;
+  refreshActiveUser: () => Promise<User | null>;
   
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
@@ -67,7 +73,8 @@ const ErpContext = createContext<ErpContextType | undefined>(undefined);
 export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [appVersion, setAppVersion] = useState<string>('Loading...');
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [activeUser] = useState<User>({ id: 'U001', username: 'Kashif Ali', role: 'ADMIN' });
+  const [activeUser, setActiveUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   // DATABASE-BACKED APP STATE
   const [products, setProducts] = useState<Product[]>([]);
@@ -93,11 +100,52 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [posTaxRate, setPosTaxRate] = useState<number>(0);
   const [paymentType, setPaymentType] = useState<'Paid' | 'Credit'>('Paid');
   const [checkoutNotification, setCheckoutNotification] = useState<string | null>(null);
-  const [appNotification, setAppNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [appNotification, setAppNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
-  const notify = (type: 'success' | 'error', message: string) => {
+  const notify = (type: 'success' | 'error' | 'info', message: string) => {
     setAppNotification({ type, message });
     setTimeout(() => setAppNotification(null), 4000);
+  };
+
+  const hasPermission = (permission: string) => {
+    return Boolean(activeUser?.permissions?.includes(permission) || activeUser?.permissions?.includes('ENTERPRISE_FULL'));
+  };
+
+  const refreshActiveUser = async () => {
+    const user = await window.api.auth.getCurrentUser();
+    if (user) {
+      setActiveUser(user);
+      return user;
+    }
+    localStorage.removeItem('erp_session_token');
+    window.api.auth.setSessionToken(null);
+    setActiveUser(null);
+    return null;
+  };
+
+  const login = async (username: string, password: string) => {
+    try {
+      const result = await window.api.auth.login(username, password);
+      localStorage.setItem('erp_session_token', result.token);
+      setActiveUser(result.user);
+      setActiveTab('dashboard');
+      await reloadData();
+      return true;
+    } catch (err: any) {
+      notify('error', err.message || 'Login failed.');
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await window.api.auth.logout();
+    } finally {
+      localStorage.removeItem('erp_session_token');
+      window.api.auth.setSessionToken(null);
+      setActiveUser(null);
+      setActiveTab('dashboard');
+    }
   };
 
   // Helper function to reload all database entities in sync
@@ -148,9 +196,30 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAppVersion('Web Mode (Bridge Missing)');
     }
 
-    // 2. Fetch Database records
-    reloadData();
+    const restoreSession = async () => {
+      try {
+        const token = localStorage.getItem('erp_session_token');
+      if (token) {
+        window.api.auth.setSessionToken(token);
+          const user = await window.api.auth.getCurrentUser();
+          if (user) {
+            setActiveUser(user);
+          } else {
+            localStorage.removeItem('erp_session_token');
+            window.api.auth.setSessionToken(null);
+          }
+        }
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    restoreSession();
   }, []);
+
+  useEffect(() => {
+    if (activeUser) reloadData();
+  }, [activeUser?.id]);
 
   // PERSISTENT SETTINGS MUTATORS
   const setStoreName = (name: string) => {
@@ -456,6 +525,8 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       appVersion,
       activeTab,
       activeUser,
+      isAuthenticated: Boolean(activeUser),
+      authLoading,
       
       setActiveTab,
       setPosCustomerName,
@@ -467,6 +538,10 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setStoreAddress,
       setStoreNTN,
       notify,
+      login,
+      logout,
+      hasPermission,
+      refreshActiveUser,
       addToCart,
       removeFromCart,
       updateCartQty,
