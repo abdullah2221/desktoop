@@ -1,1 +1,66 @@
-node_modules
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Build & Release outputs
+dist/
+dist-releases/
+out/
+bin/
+*.asar
+
+# SQLite Databases & Sidecar Files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+database/*.db
+database/*.db-journal
+database/*.db-shm
+database/*.db-wal
+
+# Database Backups
+database/backups/
+
+# SQLite Precompiled Native Binary Caches
+database/bin/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test Results & Coverage
+test-results/
+coverage/
+htmlreport/
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment & Secrets Configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env

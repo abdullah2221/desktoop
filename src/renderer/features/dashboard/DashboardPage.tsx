@@ -23,6 +23,24 @@ export const DashboardPage: React.FC = () => {
     setActiveTab 
   } = useErp();
 
+  const [recentInvoices, setRecentInvoices] = React.useState<any[]>([]);
+  const [invoiceSalesToday, setInvoiceSalesToday] = React.useState(0);
+
+  React.useEffect(() => {
+    const load = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const invoices = await window.api.invoices.getRecent({ date_from: today, date_to: today, limit: 20 });
+        setRecentInvoices(invoices || []);
+        setInvoiceSalesToday((invoices || []).reduce((sum: number, row: any) => sum + Number(row.grand_total || 0), 0));
+      } catch {
+        setRecentInvoices([]);
+        setInvoiceSalesToday(0);
+      }
+    };
+    load();
+  }, [sales.length]);
+
   // Calculated Metrics
   const lowStockProducts = products.filter(p => (p.stock_quantity ?? 0) <= (p.minimum_stock ?? 0));
   const lowStockCount = lowStockProducts.length;
@@ -41,6 +59,10 @@ export const DashboardPage: React.FC = () => {
     {
       header: 'Customer',
       accessor: (sale) => <span>{sale.customerName}</span>
+    },
+    {
+      header: 'Cashier / Branch',
+      accessor: (sale) => <span className="text-xs">{sale.cashier_name || '-'} • {sale.branch_name || sale.branch_id || '-'}</span>
     },
     {
       header: 'Date',
@@ -79,7 +101,8 @@ export const DashboardPage: React.FC = () => {
       {/* Quick Metrics Grid */}
       <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: "Today's Gross Sales", value: `Rs. ${todaySalesSum.toLocaleString()}`, change: "Updates on POS sale", border: "border-l-4 border-l-primary-blue", icon: TrendingUp },
+          { label: "Today's POS Sales", value: `Rs. ${todaySalesSum.toLocaleString()}`, change: "Counter receipts", border: "border-l-4 border-l-primary-blue", icon: TrendingUp },
+          { label: "Today's Invoice Sales", value: `Rs. ${invoiceSalesToday.toLocaleString()}`, change: "Formal invoices", border: "border-l-4 border-l-indigo-500", icon: Receipt },
           { label: "Low Stock Items", value: `${lowStockCount} Products`, change: "Requires reorder alert", border: "border-l-4 border-l-warning-amber", icon: AlertTriangle },
           { label: "Udhaar (Outstanding Credit)", value: `Rs. ${totalOutstandingCredit.toLocaleString()}`, change: "Tracked customer ledgers", border: "border-l-4 border-l-emerald-600", icon: Users },
           { label: "Current Expense Log", value: `Rs. ${totalExpenses.toLocaleString()}`, change: "Utilities and Sundry logged", border: "border-l-4 border-l-slate-400", icon: Coins }
@@ -121,10 +144,30 @@ export const DashboardPage: React.FC = () => {
             
             <Table
               columns={transactionColumns}
-              data={sales}
+              data={sales.slice(0, 10)}
               keyExtractor={(sale) => sale.invoiceNo}
               emptyMessage="No store transactions completed yet."
             />
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Recent Invoices</h3>
+            <table className="erp-table">
+              <thead><tr><th>Invoice</th><th>Customer</th><th>Status</th><th>Total</th></tr></thead>
+              <tbody>
+                {recentInvoices.slice(0, 6).map((row: any) => (
+                  <tr key={row.id}>
+                    <td>{row.invoice_no}</td>
+                    <td>{row.customer_name || 'Walk-in Customer'}</td>
+                    <td>{row.status}</td>
+                    <td>Rs. {Number(row.grand_total || 0).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {recentInvoices.length === 0 && (
+                  <tr><td colSpan={4} className="text-center text-xs text-slate-500 py-4">No recent formal invoices.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
 
           {/* Database Setup Check Card */}

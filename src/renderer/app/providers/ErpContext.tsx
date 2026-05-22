@@ -18,7 +18,7 @@ interface ErpContextType {
   posTaxRate: number;
   paymentType: 'Paid' | 'Credit';
   checkoutNotification: string | null;
-  appNotification: { type: 'success' | 'error'; message: string } | null;
+  appNotification: { type: 'success' | 'error' | 'info'; message: string } | null;
   storeName: string;
   storePhone: string;
   storeAddress: string;
@@ -49,6 +49,7 @@ interface ErpContextType {
   refreshActiveUser: () => Promise<User | null>;
   setActiveBranch: (branchId: string) => Promise<void>;
   
+  setCart: React.Dispatch<React.SetStateAction<CartItem[]>>;
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
   updateCartQty: (productId: string, quantity: number) => void;
@@ -101,7 +102,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // INTERACTIVE POS CHECKOUT STATE
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [posCustomerName, setPosCustomerName] = useState<string>('Arsalan Khan');
+  const [posCustomerName, setPosCustomerName] = useState<string>('Walk-in Customer');
   const [posDiscount, setPosDiscount] = useState<number>(0);
   const [posTaxRate, setPosTaxRate] = useState<number>(0);
   const [paymentType, setPaymentType] = useState<'Paid' | 'Credit'>('Paid');
@@ -192,17 +193,24 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       if (window.api) {
         const currentBranchId = branchOverride ?? activeBranchId;
+        const safe = async <T,>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+          try {
+            return await fn();
+          } catch {
+            return fallback;
+          }
+        };
         const [dbProducts, dbSales, dbExpenses, dbCustomers, dbSuppliers, dbCategories, dbUnits, dbBrands, dbPurchases, dbSettings] = await Promise.all([
-          window.api.products.getAll(),
-          window.api.sales.getAll(),
-          window.api.expenses.getAll(),
-          window.api.customers.getAll(),
-          window.api.suppliers.getAll(),
-          window.api.categories.getAll(),
-          window.api.units.getAll(),
-          window.api.brands.getAll(),
-          window.api.purchases ? window.api.purchases.getAll() : Promise.resolve([]),
-          window.api.settings.get()
+          safe(() => window.api.products.getAll(), [] as any[]),
+          safe(() => window.api.sales.getAll(), [] as any[]),
+          safe(() => window.api.expenses.getAll(), [] as any[]),
+          safe(() => window.api.customers.getAll(), [] as any[]),
+          safe(() => window.api.suppliers.getAll(), [] as any[]),
+          safe(() => window.api.categories.getAll(), [] as any[]),
+          safe(() => window.api.units.getAll(), [] as any[]),
+          safe(() => window.api.brands.getAll(), [] as any[]),
+          window.api.purchases ? safe(() => window.api.purchases.getAll(), [] as any[]) : Promise.resolve([] as any[]),
+          safe(() => window.api.settings.get(), {} as Record<string, string>)
         ]);
         
         setProducts(dbProducts);
@@ -319,15 +327,39 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const discountAmount = posDiscount;
       const taxAmount = Math.round((subtotal - discountAmount) * (posTaxRate / 100));
       const grandTotal = subtotal - discountAmount + taxAmount;
+      const normalizedCustomerName = (posCustomerName || '').trim() || 'Walk-in Customer';
+      const isWalkIn = normalizedCustomerName.toLowerCase() === 'walk-in customer';
+      let selectedRegisteredCustomer = customers.find((customer) => customer.name === normalizedCustomerName) as any;
+      if (!selectedRegisteredCustomer && !isWalkIn) {
+        selectedRegisteredCustomer = await window.api.customers.getByName(posCustomerName);
+      }
+      const customerType: 'WALK_IN' | 'REGISTERED' = selectedRegisteredCustomer ? 'REGISTERED' : 'WALK_IN';
+      if (paymentType === 'Credit' && customerType !== 'REGISTERED') {
+        notify('error', 'Credit/khata sale requires a registered customer.');
+        return;
+      }
 
       const newInvoiceNo = `INV-${Math.floor(1000 + Math.random() * 9000)}`;
-      const currentDate = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const currentDate = now.toISOString().split('T')[0];
+      const saleTime = now.toISOString();
+      const branchName = activeBranch?.branch_name || activeBranch?.branch_code || 'Main Branch';
 
       // 1. Log Transaction Sale to database
       await window.api.sales.create({
         invoiceNo: newInvoiceNo,
-        customerName: posCustomerName,
+        branch_id: activeBranchId || 'B001',
+        branch_name: branchName,
+        customerName: customerType === 'WALK_IN' ? 'Walk-in Customer' : normalizedCustomerName,
+        customer_id: selectedRegisteredCustomer?.name || null,
+        customer_type: customerType,
+        cashier_id: activeUser?.id,
+        cashier_name: activeUser?.full_name || activeUser?.username || 'System Cashier',
+        shift_id: `SHIFT-${currentDate}`,
+        register_id: 'REG-1',
+        payment_method: paymentType === 'Paid' ? 'Cash' : 'Credit',
         date: currentDate,
+        sale_time: saleTime,
         total: grandTotal,
         status: paymentType,
         discount: discountAmount,
@@ -340,13 +372,15 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       // 2. Increment customer credit line (Udhaar) or purchases totals
-      const creditIncrement = paymentType === 'Credit' ? grandTotal : 0;
-      await window.api.customers.createOrIncrementCredit(
-        posCustomerName,
-        creditIncrement,
-        grandTotal,
-        currentDate
-      );
+      if (customerType === 'REGISTERED') {
+        const creditIncrement = paymentType === 'Credit' ? grandTotal : 0;
+        await window.api.customers.createOrIncrementCredit(
+          posCustomerName,
+          creditIncrement,
+          grandTotal,
+          currentDate
+        );
+      }
 
       // 3. Reload local memory state from database
       await reloadData();
@@ -354,7 +388,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Reset POS cart parameters
       setCart([]);
       setPosDiscount(0);
-      setPosCustomerName(customers[0]?.name || 'Arsalan Khan');
+      setPosCustomerName('Walk-in Customer');
 
       setCheckoutNotification(`Success! ${newInvoiceNo} generated. Total: Rs. ${grandTotal.toLocaleString()}`);
       setTimeout(() => setCheckoutNotification(null), 5000);
@@ -412,6 +446,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newExp = {
       id: `EXP-${Math.floor(100 + Math.random() * 900)}`,
+      branch_id: activeBranchId || 'B001',
       date: new Date().toISOString().split('T')[0],
       category,
       amount,
@@ -515,7 +550,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const createPurchase = async (payload: CreatePurchaseInput) => {
     if (!window.api) return { success: false };
     try {
-      const res = await window.api.purchases.create(payload);
+      const res = await window.api.purchases.create({ ...payload, branch_id: payload.branch_id || activeBranchId || 'B001' });
       if (res.success) {
         // Full reload of affected entities
         await reloadPurchases();
@@ -589,6 +624,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       hasPermission,
       refreshActiveUser,
       setActiveBranch,
+      setCart,
       addToCart,
       removeFromCart,
       updateCartQty,

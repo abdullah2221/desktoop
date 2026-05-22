@@ -8,44 +8,76 @@ import {
   Settings, 
   Coins, 
   Database,
-  BookOpen
-  ,
+  BookOpen,
   FileText,
   Percent,
   Landmark,
   ClipboardList,
-  Building2
+  Building2,
+  Target,
+  Repeat,
+  UserRoundCheck,
+  Timer,
+  BadgeDollarSign,
+  Warehouse,
+  Activity,
+  Undo2,
+  Bell
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   hasPermission?: (permission: string) => boolean;
+  userRole?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
-  hasPermission = () => true
+  hasPermission = () => true,
+  userRole = ''
 }) => {
+  const roleKey = userRole.toLowerCase();
+  const isCashierRole = roleKey.includes('cashier');
+  const cashierAllowed = new Set([
+    'dashboard', 'pos', 'sales', 'customers', 'inventory', 'sales_returns', 'notifications'
+  ]);
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, permission: null },
-    { id: 'pos', label: 'POS Billing', icon: CreditCard, badge: 'Active', permission: 'pos.sale.create' },
-    { id: 'inventory', label: 'Inventory', icon: Layers, permission: 'inventory.product.edit' },
-    { id: 'purchases', label: 'Purchases / Stock In', icon: ShoppingBag, permission: 'purchase.create' },
-    { id: 'suppliers', label: 'Suppliers / Vendors', icon: Users, permission: 'supplier.edit' },
-    { id: 'customers', label: 'Customers / Udhaar', icon: Users, permission: 'pos.sale.create' },
-    { id: 'sales', label: 'Sales Invoices', icon: FileText, permission: 'pos.sale.create' },
-    { id: 'taxes', label: 'Taxes', icon: Percent, permission: 'taxes.manage' },
+    { id: 'pos', label: 'POS / Billing', icon: CreditCard, badge: 'Active', permission: 'pos.sale.create' },
+    { id: 'sales', label: 'Sales / Receipts', icon: FileText, permission: ['sales.view.own', 'sales.view.branch', 'sales.view.all', 'pos.sale.create'] },
+    { id: 'customers', label: 'Customers / Khata', icon: Users, permission: 'khata.view' },
+    { id: 'inventory', label: 'Products / Inventory', icon: Layers, permission: 'inventory.product.edit' },
+    { id: 'warehouse', label: 'Warehouse / Stock', icon: Warehouse, permission: ['inventory.view.branch', 'inventory.transfer', 'inventory.adjust'] },
+    { id: 'purchases', label: 'Purchases / Suppliers', icon: ShoppingBag, permission: 'purchase.create' },
+    { id: 'suppliers', label: 'Suppliers', icon: Users, permission: 'supplier.edit' },
+    { id: 'expenses', label: 'Expenses', icon: Coins, permission: 'purchase.create' },
     { id: 'banking', label: 'Banking', icon: Landmark, permission: 'banking.manage' },
-    { id: 'expenses', label: 'Expense Ledger', icon: Coins, permission: 'purchase.create' },
     { id: 'accounting', label: 'Accounting', icon: BookOpen, permission: 'accounting.journal.create' },
     { id: 'reports', label: 'Reports', icon: ClipboardList, permission: 'reports.view' },
+    { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'notifications.view' },
+    { id: 'employees', label: 'Employees', icon: UserRoundCheck, permission: 'employees.manage' },
+    { id: 'time', label: 'Time', icon: Timer, permission: ['time.track', 'time.approve'] },
+    { id: 'automation', label: 'Automation', icon: Repeat, permission: 'automation.manage' },
+    { id: 'settings', label: 'Settings', icon: Settings, permission: 'settings.edit' },
     { id: 'users', label: 'Users & Roles', icon: Settings, permission: 'users.manage' },
-    { id: 'branches', label: 'Branches & Classes', icon: Building2, permission: 'branch.manage' },
     { id: 'backup', label: 'Backup & Restore', icon: Database, permission: ['backup.manage', 'settings.edit'] },
-    { id: 'settings', label: 'Store Settings', icon: Settings, permission: 'settings.edit' }
-  ].filter((item) => !item.permission || (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission)));
+    { id: 'system', label: 'System Health', icon: Activity, permission: null },
+
+    // Secondary modules retained for completeness, kept below primary workflow
+    { id: 'budgets', label: 'Budgets & P&L', icon: Target, permission: ['budget.manage', 'reports.view'] },
+    { id: 'sales_returns', label: 'Sales Returns', icon: Undo2, permission: 'returns.view' },
+    { id: 'purchase_returns', label: 'Purchase Returns', icon: Undo2, permission: 'returns.view' },
+    { id: 'taxes', label: 'Taxes', icon: Percent, permission: 'taxes.manage' },
+    { id: 'currency', label: 'Currencies', icon: BadgeDollarSign, permission: 'currency.manage' },
+    { id: 'branches', label: 'Branches & Classes', icon: Building2, permission: 'branch.manage' },
+    { id: 'datasync', label: 'Data Sync (Excel/CSV)', icon: Repeat, permission: ['data.import', 'data.export'] }
+  ].filter((item) => {
+    if (isCashierRole && !cashierAllowed.has(item.id)) return false;
+    return !item.permission || (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission));
+  });
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm">

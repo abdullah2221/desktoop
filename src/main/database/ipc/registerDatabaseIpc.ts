@@ -22,6 +22,18 @@ import { registerAuthHandlers } from './auth.handlers';
 import { registerBackupHandlers } from './backup.handlers';
 import { registerBranchHandlers } from './branch.handlers';
 import { registerClassHandlers } from './class.handlers';
+import { registerBudgetHandlers } from './budget.handlers';
+import { registerRecurringHandlers } from './recurring.handlers';
+import { registerEmployeeHandlers } from './employee.handlers';
+import { registerCurrencyHandlers } from './currency.handlers';
+import { registerInventoryHandlers } from './inventory.handlers';
+import { registerImportExportHandlers } from './importExport.handlers';
+import { registerReceiptHandlers } from './receipt.handlers';
+import { registerReturnHandlers } from './return.handlers';
+import { registerDiscountHandlers } from './discount.handlers';
+import { registerNotificationHandlers } from './notification.handlers';
+import { registerKhataHandlers } from './khata.handlers';
+import { registerCashierShiftHandlers } from './cashierShift.handlers';
 
 export function registerDatabaseIpc() {
   console.log('[IPC Registration] Activating secure SQLite database channels...');
@@ -49,5 +61,17 @@ export function registerDatabaseIpc() {
   registerBackupHandlers();
   registerBranchHandlers();
   registerClassHandlers();
+  registerBudgetHandlers();
+  registerRecurringHandlers();
+  registerEmployeeHandlers();
+  registerCurrencyHandlers();
+  registerInventoryHandlers();
+  registerImportExportHandlers();
+  registerReceiptHandlers();
+  registerReturnHandlers();
+  registerDiscountHandlers();
+  registerNotificationHandlers();
+  registerKhataHandlers();
+  registerCashierShiftHandlers();
   console.log('[IPC Registration] Secure database channel binding completed successfully.');
 }

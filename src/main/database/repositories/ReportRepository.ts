@@ -6,6 +6,7 @@ export interface ReportDateRange {
   dateTo: string;
   branchId?: string;
   classId?: string;
+  budgetId?: string;
 }
 
 type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense';
@@ -371,5 +372,253 @@ export class ReportRepository {
     `).all(dateFrom, dateTo);
     const total = (byCategory as Array<{ total_amount: number }>).reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
     return { dateFrom, dateTo, byCategory, total };
+  }
+
+  static budgetVsActual({ dateFrom, dateTo, branchId, classId, budgetId }: ReportDateRange) {
+    const db = getDatabase();
+    const budgetFilter = budgetId ? 'AND b.id = @budgetId' : '';
+    const branchFilter = branchId ? 'AND (b.branch_id = @branchId OR b.branch_id IS NULL)' : '';
+    const classFilter = classId ? 'AND (b.class_id = @classId OR b.class_id IS NULL)' : '';
+    const rows = db.prepare(`
+      WITH selected_budget AS (
+        SELECT b.*
+        FROM budgets b
+        WHERE b.status IN ('Draft', 'Active', 'Closed')
+          AND b.date_from <= @dateTo
+          AND b.date_to >= @dateFrom
+          ${budgetFilter}
+          ${branchFilter}
+          ${classFilter}
+      ),
+      planned AS (
+        SELECT
+          bl.account_id,
+          SUM(bl.amount) as budget_amount,
+          GROUP_CONCAT(DISTINCT sb.id) as budget_ids,
+          COALESCE(MAX(sb.branch_id), @branchId) as effective_branch_id,
+          COALESCE(MAX(sb.class_id), @classId) as effective_class_id
+        FROM budget_lines bl
+        JOIN selected_budget sb ON sb.id = bl.budget_id
+        GROUP BY bl.account_id
+      ),
+      actuals AS (
+        SELECT
+          jl.account_id,
+          SUM(jl.debit) as debit,
+          SUM(jl.credit) as credit
+        FROM journal_entry_lines jl
+        JOIN journal_entries je ON je.id = jl.journal_entry_id
+        WHERE je.status = 'posted'
+          AND je.entry_date BETWEEN @dateFrom AND @dateTo
+          AND (@branchId IS NULL OR je.branch_id = @branchId)
+          AND (@classId IS NULL OR je.class_id = @classId)
+        GROUP BY jl.account_id
+      )
+      SELECT
+        a.id as account_id,
+        a.account_code,
+        a.account_name,
+        a.account_type,
+        COALESCE(p.budget_amount, 0) as budget_amount,
+        COALESCE(actuals.debit, 0) as debit,
+        COALESCE(actuals.credit, 0) as credit,
+        p.budget_ids
+      FROM planned p
+      JOIN chart_of_accounts a ON a.id = p.account_id
+      LEFT JOIN actuals ON actuals.account_id = p.account_id
+      ORDER BY a.account_code ASC
+    `).all({ dateFrom, dateTo, branchId: branchId || null, classId: classId || null, budgetId: budgetId || null }) as Array<{
+      account_id: string;
+      account_code: string;
+      account_name: string;
+      account_type: AccountType;
+      budget_amount: number;
+      debit: number;
+      credit: number;
+      budget_ids: string;
+    }>;
+
+    const reportRows = rows.map((row) => {
+      const actual_amount = signedBalance(row.account_type, 0, row.debit, row.credit);
+      const variance_amount = actual_amount - Number(row.budget_amount || 0);
+      const variance_percentage = Number(row.budget_amount || 0) === 0 ? null : (variance_amount / Math.abs(Number(row.budget_amount))) * 100;
+      return { ...row, actual_amount, variance_amount, variance_percentage };
+    });
+    return {
+      dateFrom,
+      dateTo,
+      branchId,
+      classId,
+      budgetId,
+      rows: reportRows,
+      totalBudget: reportRows.reduce((sum, row) => sum + Number(row.budget_amount || 0), 0),
+      totalActual: reportRows.reduce((sum, row) => sum + Number(row.actual_amount || 0), 0),
+      totalVariance: reportRows.reduce((sum, row) => sum + Number(row.variance_amount || 0), 0)
+    };
+  }
+
+  static classProfitAndLoss({ dateFrom, dateTo, branchId, classId }: ReportDateRange) {
+    const db = getDatabase();
+    const rows = db.prepare(`
+      SELECT
+        COALESCE(c.id, 'UNASSIGNED') as class_id,
+        COALESCE(c.class_code, 'UNASSIGNED') as class_code,
+        COALESCE(c.class_name, 'Unassigned') as class_name,
+        a.account_type,
+        a.account_code,
+        SUM(jl.debit) as debit,
+        SUM(jl.credit) as credit
+      FROM journal_entry_lines jl
+      JOIN journal_entries je ON je.id = jl.journal_entry_id
+      JOIN chart_of_accounts a ON a.id = jl.account_id
+      LEFT JOIN classes c ON c.id = je.class_id
+      WHERE je.status = 'posted'
+        AND je.entry_date BETWEEN @dateFrom AND @dateTo
+        AND a.account_type IN ('Income', 'Expense')
+        AND (@branchId IS NULL OR je.branch_id = @branchId)
+        AND (@classId IS NULL OR je.class_id = @classId)
+      GROUP BY COALESCE(c.id, 'UNASSIGNED'), COALESCE(c.class_code, 'UNASSIGNED'), COALESCE(c.class_name, 'Unassigned'), a.account_type, a.account_code
+      ORDER BY class_code ASC
+    `).all({ dateFrom, dateTo, branchId: branchId || null, classId: classId || null }) as Array<{
+      class_id: string;
+      class_code: string;
+      class_name: string;
+      account_type: AccountType;
+      account_code: string;
+      debit: number;
+      credit: number;
+    }>;
+
+    const byClass = new Map<string, { class_id: string; class_code: string; class_name: string; income: number; cogs: number; expenses: number; grossProfit: number; netProfit: number }>();
+    for (const row of rows) {
+      const current = byClass.get(row.class_id) || {
+        class_id: row.class_id,
+        class_code: row.class_code,
+        class_name: row.class_name,
+        income: 0,
+        cogs: 0,
+        expenses: 0,
+        grossProfit: 0,
+        netProfit: 0
+      };
+      const amount = signedBalance(row.account_type, 0, row.debit, row.credit);
+      if (row.account_type === 'Income') current.income += amount;
+      else if (row.account_code === '5000') current.cogs += amount;
+      else current.expenses += amount;
+      current.grossProfit = current.income - current.cogs;
+      current.netProfit = current.income - current.cogs - current.expenses;
+      byClass.set(row.class_id, current);
+    }
+    const classes = Array.from(byClass.values()).sort((a, b) => b.netProfit - a.netProfit);
+    return {
+      dateFrom,
+      dateTo,
+      branchId,
+      classId,
+      classes,
+      totals: {
+        income: classes.reduce((sum, row) => sum + row.income, 0),
+        cogs: classes.reduce((sum, row) => sum + row.cogs, 0),
+        expenses: classes.reduce((sum, row) => sum + row.expenses, 0),
+        netProfit: classes.reduce((sum, row) => sum + row.netProfit, 0)
+      }
+    };
+  }
+
+  static customerBalanceReport() {
+    const db = getDatabase();
+    const rows = db.prepare(`
+      SELECT
+        c.name as customer_name,
+        c.phone,
+        c.whatsapp,
+        c.credit_limit,
+        c.due_days,
+        c.status,
+        c.credit as current_balance,
+        c.lastPayment
+      FROM customers c
+      WHERE COALESCE(c.status, 'active') != 'inactive'
+      ORDER BY c.credit DESC, c.name ASC
+    `).all();
+    const totalOutstanding = (rows as any[]).reduce((sum, row) => sum + Number(row.current_balance || 0), 0);
+    return { rows, totalOutstanding };
+  }
+
+  static customerAgingReport(asOfDate: string) {
+    const db = getDatabase();
+    const rows = db.prepare(`
+      SELECT
+        c.name as customer_name,
+        c.credit as balance,
+        c.due_days,
+        c.lastPayment
+      FROM customers c
+      WHERE COALESCE(c.status, 'active') != 'inactive'
+        AND COALESCE(c.credit, 0) > 0
+      ORDER BY c.credit DESC
+    `).all() as Array<{ customer_name: string; balance: number; due_days: number; lastPayment: string }>;
+
+    const asOf = new Date(asOfDate);
+    const mapped = rows.map((row) => {
+      const baseDate = new Date(row.lastPayment || asOfDate);
+      const dueDate = new Date(baseDate.getTime() + Math.max(0, Number(row.due_days || 0)) * 86400000);
+      const overdueDays = Math.max(0, Math.floor((asOf.getTime() - dueDate.getTime()) / 86400000));
+      const bucket = overdueDays <= 30 ? '0-30' : overdueDays <= 60 ? '31-60' : overdueDays <= 90 ? '61-90' : '90+';
+      return { ...row, due_date: dueDate.toISOString().split('T')[0], overdue_days: overdueDays, aging_bucket: bucket };
+    });
+    return {
+      asOfDate,
+      rows: mapped,
+      totals: {
+        total: mapped.reduce((sum, row) => sum + Number(row.balance || 0), 0),
+        current: mapped.filter((row) => row.overdue_days === 0).reduce((sum, row) => sum + Number(row.balance || 0), 0),
+        days_30: mapped.filter((row) => row.aging_bucket === '0-30' && row.overdue_days > 0).reduce((sum, row) => sum + Number(row.balance || 0), 0),
+        days_60: mapped.filter((row) => row.aging_bucket === '31-60').reduce((sum, row) => sum + Number(row.balance || 0), 0),
+        days_90: mapped.filter((row) => row.aging_bucket === '61-90').reduce((sum, row) => sum + Number(row.balance || 0), 0),
+        over_90: mapped.filter((row) => row.aging_bucket === '90+').reduce((sum, row) => sum + Number(row.balance || 0), 0)
+      }
+    };
+  }
+
+  static paymentCollectionReport(dateFrom: string, dateTo: string) {
+    const db = getDatabase();
+    const khataPayments = db.prepare(`
+      SELECT customer_name, SUM(amount) as amount
+      FROM customer_payments
+      WHERE payment_date BETWEEN ? AND ?
+      GROUP BY customer_name
+    `).all(dateFrom, dateTo) as Array<{ customer_name: string; amount: number }>;
+    const invoicePayments = db.prepare(`
+      SELECT i.customer_name, SUM(ip.amount) as amount
+      FROM invoice_payments ip
+      JOIN invoices i ON i.id = ip.invoice_id
+      WHERE ip.payment_date BETWEEN ? AND ?
+      GROUP BY i.customer_name
+    `).all(dateFrom, dateTo) as Array<{ customer_name: string; amount: number }>;
+    const byCustomer = new Map<string, { customer_name: string; khata_payments: number; invoice_payments: number; total_collected: number }>();
+    for (const row of khataPayments) {
+      const current = byCustomer.get(row.customer_name) || { customer_name: row.customer_name, khata_payments: 0, invoice_payments: 0, total_collected: 0 };
+      current.khata_payments += Number(row.amount || 0);
+      current.total_collected = current.khata_payments + current.invoice_payments;
+      byCustomer.set(row.customer_name, current);
+    }
+    for (const row of invoicePayments) {
+      const current = byCustomer.get(row.customer_name) || { customer_name: row.customer_name, khata_payments: 0, invoice_payments: 0, total_collected: 0 };
+      current.invoice_payments += Number(row.amount || 0);
+      current.total_collected = current.khata_payments + current.invoice_payments;
+      byCustomer.set(row.customer_name, current);
+    }
+    const rows = Array.from(byCustomer.values()).sort((a, b) => b.total_collected - a.total_collected);
+    return {
+      dateFrom,
+      dateTo,
+      rows,
+      totals: {
+        khata_payments: rows.reduce((sum, row) => sum + row.khata_payments, 0),
+        invoice_payments: rows.reduce((sum, row) => sum + row.invoice_payments, 0),
+        total_collected: rows.reduce((sum, row) => sum + row.total_collected, 0)
+      }
+    };
   }
 }

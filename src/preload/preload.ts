@@ -27,12 +27,15 @@ contextBridge.exposeInMainWorld('api', {
   products: {
     getAll: () => ipcRenderer.invoke('products:getAll'),
     getById: (id: string) => ipcRenderer.invoke('products:getById', id),
+    getByBarcode: (barcode: string) => ipcRenderer.invoke('products:getByBarcode', barcode),
+    searchByBarcodeOrSku: (query: string) => ipcRenderer.invoke('products:searchByBarcodeOrSku', query),
     getLowStock: () => ipcRenderer.invoke('products:getLowStock'),
     create: (product: Partial<Product>) => ipcRenderer.invoke('products:create', product),
     update: (product: Partial<Product>) => ipcRenderer.invoke('products:update', product),
     deactivate: (id: string) => ipcRenderer.invoke('products:deactivate', id),
     updateStock: (id: string, newStock: number) => ipcRenderer.invoke('products:updateStock', id, newStock),
   },
+
 
   categories: {
     getAll: () => ipcRenderer.invoke('categories:getAll'),
@@ -66,6 +69,15 @@ contextBridge.exposeInMainWorld('api', {
   
   customers: {
     getAll: () => ipcRenderer.invoke('customers:getAll'),
+    create: (payload: unknown) => ipcRenderer.invoke('customers:create', payload),
+    update: (payload: unknown) => ipcRenderer.invoke('customers:update', payload),
+    deactivate: (name: string) => ipcRenderer.invoke('customers:deactivate', name),
+    getByName: (name: string) => ipcRenderer.invoke('customers:getByName', name),
+    getById: (id: string) => ipcRenderer.invoke('customers:getById', id),
+    getStatement: (id: string) => ipcRenderer.invoke('customers:getStatement', id),
+    getSales: (id: string) => ipcRenderer.invoke('customers:getSales', id),
+    getInvoices: (id: string) => ipcRenderer.invoke('customers:getInvoices', id),
+    getPayments: (id: string) => ipcRenderer.invoke('customers:getPayments', id),
     createOrIncrementCredit: (name: string, creditChange: number, purchasesChange: number, date: string) => 
       ipcRenderer.invoke('customers:createOrIncrementCredit', name, creditChange, purchasesChange, date),
     receivePayment: (name: string, payAmt: number, date: string) => 
@@ -73,17 +85,60 @@ contextBridge.exposeInMainWorld('api', {
   },
   
   sales: {
-    getAll: () => ipcRenderer.invoke('sales:getAll'),
+    getAll: () => ipcRenderer.invoke('sales:getAll', sessionToken),
+    getRecent: (filters?: Record<string, unknown>) => ipcRenderer.invoke('sales:getRecent', sessionToken, filters),
+    getById: (invoiceNo: string) => ipcRenderer.invoke('sales:getById', sessionToken, invoiceNo),
+    getItems: (invoiceNo: string) => ipcRenderer.invoke('sales:getItems', sessionToken, invoiceNo),
+    getByCustomer: (customerIdOrName: string) => ipcRenderer.invoke('sales:getByCustomer', sessionToken, customerIdOrName),
+    getByShift: (shiftId: string) => ipcRenderer.invoke('sales:getByShift', sessionToken, shiftId),
+    getByBranch: (branchId: string) => ipcRenderer.invoke('sales:getByBranch', sessionToken, branchId),
+    getHistory: (filters?: Record<string, unknown>) => ipcRenderer.invoke('sales:getHistory', sessionToken, filters),
+    getReceiptDetail: (invoiceNo: string) => ipcRenderer.invoke('sales:getReceiptDetail', sessionToken, invoiceNo),
+    getAuditTrail: (invoiceNo: string) => ipcRenderer.invoke('sales:getAuditTrail', sessionToken, invoiceNo),
+    void: (invoiceNo: string, reason: string) => ipcRenderer.invoke('sales:void', sessionToken, invoiceNo, reason),
     create: (sale: {
       invoiceNo: string;
       customerName: string;
+      customer_id?: string | null;
+      customer_type?: 'WALK_IN' | 'REGISTERED';
       date: string;
+      sale_time?: string;
       total: number;
       status: 'Paid' | 'Credit';
+      payment_method?: string;
+      cashier_id?: string;
+      cashier_name?: string;
+      branch_name?: string;
+      shift_id?: string;
+      register_id?: string;
       discount: number;
+      discount_type?: 'percentage' | 'fixed';
+      discount_value?: number;
+      discount_amount?: number;
+      subtotal?: number;
+      total_amount?: number;
       tax_rate: number;
-      items: Array<{ product_id: string; quantity: number; price: number }>;
-    }) => ipcRenderer.invoke('sales:create', sale),
+      items: Array<{
+        product_id: string;
+        quantity: number;
+        price: number;
+        discount_type?: 'percentage' | 'fixed';
+        discount_value?: number;
+        discount_amount?: number;
+        line_total?: number;
+      }>;
+    }) => ipcRenderer.invoke('sales:create', sessionToken, sale),
+  },
+
+  cashierShifts: {
+    getRegisters: (branchId?: string) => ipcRenderer.invoke('cashierShifts:getRegisters', sessionToken, branchId),
+    getActiveShift: (branchId: string, registerId: string) => ipcRenderer.invoke('cashierShifts:getActiveShift', sessionToken, branchId, registerId),
+    openShift: (payload: { branch_id: string; register_id: string; opening_cash: number; notes?: string }) =>
+      ipcRenderer.invoke('cashierShifts:openShift', sessionToken, payload),
+    getShiftSummary: (shiftId: string) => ipcRenderer.invoke('cashierShifts:getShiftSummary', sessionToken, shiftId),
+    closeShift: (payload: { shift_id: string; counted_cash: number; notes?: string }) =>
+      ipcRenderer.invoke('cashierShifts:closeShift', sessionToken, payload),
+    getOpenShifts: () => ipcRenderer.invoke('cashierShifts:getOpenShifts', sessionToken),
   },
   
   expenses: {
@@ -99,6 +154,11 @@ contextBridge.exposeInMainWorld('api', {
   system: {
     backup: () => ipcRenderer.invoke('system:backup'),
     getStats: () => ipcRenderer.invoke('system:getStats'),
+    getAppInfo: () => ipcRenderer.invoke('system:getAppInfo'),
+    getDiagnostics: () => ipcRenderer.invoke('system:getDiagnostics'),
+    getDatabaseStatus: () => ipcRenderer.invoke('system:getDatabaseStatus'),
+    getLogStatus: () => ipcRenderer.invoke('system:getLogStatus'),
+    getEnvironmentInfo: () => ipcRenderer.invoke('system:getEnvironmentInfo'),
   },
 
   purchases: {
@@ -137,12 +197,13 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   invoices: {
-    getAll: () => ipcRenderer.invoke('invoices:getAll'),
-    getById: (id: string) => ipcRenderer.invoke('invoices:getById', id),
-    create: (payload: unknown) => ipcRenderer.invoke('invoices:create', payload),
-    updateDraft: (payload: unknown) => ipcRenderer.invoke('invoices:updateDraft', payload),
-    finalize: (id: string) => ipcRenderer.invoke('invoices:finalize', id),
-    void: (id: string) => ipcRenderer.invoke('invoices:void', id),
+    getAll: () => ipcRenderer.invoke('invoices:getAll', sessionToken),
+    getRecent: (filters?: Record<string, unknown>) => ipcRenderer.invoke('invoices:getRecent', sessionToken, filters),
+    getById: (id: string) => ipcRenderer.invoke('invoices:getById', sessionToken, id),
+    create: (payload: unknown) => ipcRenderer.invoke('invoices:create', sessionToken, payload),
+    updateDraft: (payload: unknown) => ipcRenderer.invoke('invoices:updateDraft', sessionToken, payload),
+    finalize: (id: string) => ipcRenderer.invoke('invoices:finalize', sessionToken, id),
+    void: (id: string) => ipcRenderer.invoke('invoices:void', sessionToken, id),
   },
 
   invoicePayments: {
@@ -203,6 +264,87 @@ contextBridge.exposeInMainWorld('api', {
     salesByCustomerProduct: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:salesByCustomerProduct', sessionToken, dateFrom, dateTo),
     purchasesBySupplierProduct: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:purchasesBySupplierProduct', sessionToken, dateFrom, dateTo),
     expenseSummary: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:expenseSummary', sessionToken, dateFrom, dateTo),
+    budgetVsActual: (dateFrom: string, dateTo: string, budgetId?: string, branchId?: string, classId?: string) => ipcRenderer.invoke('reports:budgetVsActual', sessionToken, dateFrom, dateTo, budgetId, branchId, classId),
+    classProfitAndLoss: (dateFrom: string, dateTo: string, branchId?: string, classId?: string) => ipcRenderer.invoke('reports:classProfitAndLoss', sessionToken, dateFrom, dateTo, branchId, classId),
+    customerBalance: () => ipcRenderer.invoke('reports:customerBalance', sessionToken),
+    customerAging: (asOfDate: string) => ipcRenderer.invoke('reports:customerAging', sessionToken, asOfDate),
+    paymentCollection: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:paymentCollection', sessionToken, dateFrom, dateTo),
+  },
+
+  budgets: {
+    getAll: () => ipcRenderer.invoke('budgets:getAll', sessionToken),
+    getById: (id: string) => ipcRenderer.invoke('budgets:getById', sessionToken, id),
+    create: (payload: unknown) => ipcRenderer.invoke('budgets:create', sessionToken, payload),
+    update: (payload: unknown) => ipcRenderer.invoke('budgets:update', sessionToken, payload),
+    deactivate: (id: string) => ipcRenderer.invoke('budgets:deactivate', sessionToken, id),
+  },
+
+  recurring: {
+    getTemplates: () => ipcRenderer.invoke('recurring:getTemplates', sessionToken),
+    getTemplateById: (id: string) => ipcRenderer.invoke('recurring:getTemplateById', sessionToken, id),
+    createTemplate: (payload: unknown) => ipcRenderer.invoke('recurring:createTemplate', sessionToken, payload),
+    updateTemplate: (payload: unknown) => ipcRenderer.invoke('recurring:updateTemplate', sessionToken, payload),
+    deactivateTemplate: (id: string) => ipcRenderer.invoke('recurring:deactivateTemplate', sessionToken, id),
+    getRuns: (templateId?: string) => ipcRenderer.invoke('recurring:getRuns', sessionToken, templateId),
+    runDue: (runDate?: string) => ipcRenderer.invoke('recurring:runDue', sessionToken, runDate),
+  },
+
+  automation: {
+    getRules: () => ipcRenderer.invoke('automation:getRules', sessionToken),
+    updateRules: (settings: Record<string, string>) => ipcRenderer.invoke('automation:updateRules', sessionToken, settings),
+  },
+
+  employees: {
+    getAll: () => ipcRenderer.invoke('employees:getAll', sessionToken),
+    create: (payload: unknown) => ipcRenderer.invoke('employees:create', sessionToken, payload),
+    update: (payload: unknown) => ipcRenderer.invoke('employees:update', sessionToken, payload),
+    deactivate: (id: string) => ipcRenderer.invoke('employees:deactivate', sessionToken, id),
+  },
+
+  timesheets: {
+    getAll: (filters?: Record<string, unknown>) => ipcRenderer.invoke('timesheets:getAll', sessionToken, filters),
+    clockIn: (payload: unknown) => ipcRenderer.invoke('timesheets:clockIn', sessionToken, payload),
+    clockOut: (id: string, payload?: unknown) => ipcRenderer.invoke('timesheets:clockOut', sessionToken, id, payload),
+    createManual: (payload: unknown) => ipcRenderer.invoke('timesheets:createManual', sessionToken, payload),
+    approve: (id: string) => ipcRenderer.invoke('timesheets:approve', sessionToken, id),
+    summary: (filters?: Record<string, unknown>) => ipcRenderer.invoke('timesheets:summary', sessionToken, filters),
+  },
+
+  currencies: {
+    getAll: () => ipcRenderer.invoke('currencies:getAll', sessionToken),
+    getBase: () => ipcRenderer.invoke('currencies:getBase', sessionToken),
+    create: (payload: unknown) => ipcRenderer.invoke('currencies:create', sessionToken, payload),
+    update: (payload: unknown) => ipcRenderer.invoke('currencies:update', sessionToken, payload),
+    deactivate: (code: string) => ipcRenderer.invoke('currencies:deactivate', sessionToken, code),
+  },
+
+  exchangeRates: {
+    getAll: () => ipcRenderer.invoke('exchangeRates:getAll', sessionToken),
+    create: (payload: unknown) => ipcRenderer.invoke('exchangeRates:create', sessionToken, payload),
+    update: (payload: unknown) => ipcRenderer.invoke('exchangeRates:update', sessionToken, payload),
+    convert: (amount: number, fromCurrency: string, toCurrency?: string, effectiveDate?: string) => ipcRenderer.invoke('exchangeRates:convert', sessionToken, amount, fromCurrency, toCurrency, effectiveDate),
+    gainLossFoundation: (originalAmount: number, bookingRate: number, settlementRate: number) => ipcRenderer.invoke('exchangeRates:gainLossFoundation', sessionToken, originalAmount, bookingRate, settlementRate),
+  },
+
+  branchInventory: {
+    getAll: (branchId?: string) => ipcRenderer.invoke('branchInventory:getAll', sessionToken, branchId),
+    upsert: (payload: unknown) => ipcRenderer.invoke('branchInventory:upsert', sessionToken, payload),
+    lowStock: (branchId?: string) => ipcRenderer.invoke('branchInventory:lowStock', sessionToken, branchId),
+    valuation: (branchId?: string) => ipcRenderer.invoke('branchInventory:valuation', sessionToken, branchId),
+  },
+
+  stockTransfers: {
+    getAll: () => ipcRenderer.invoke('stockTransfers:getAll', sessionToken),
+    create: (payload: unknown) => ipcRenderer.invoke('stockTransfers:create', sessionToken, payload),
+    approve: (id: string) => ipcRenderer.invoke('stockTransfers:approve', sessionToken, id),
+    complete: (id: string) => ipcRenderer.invoke('stockTransfers:complete', sessionToken, id),
+    reject: (id: string) => ipcRenderer.invoke('stockTransfers:reject', sessionToken, id),
+  },
+
+  inventoryAdjustments: {
+    getAll: () => ipcRenderer.invoke('inventoryAdjustments:getAll', sessionToken),
+    create: (payload: unknown) => ipcRenderer.invoke('inventoryAdjustments:create', sessionToken, payload),
+    accountingFoundation: (adjustmentId: string) => ipcRenderer.invoke('inventoryAdjustments:accountingFoundation', sessionToken, adjustmentId),
   },
 
   users: {
@@ -245,5 +387,83 @@ contextBridge.exposeInMainWorld('api', {
     create: (payload: unknown) => ipcRenderer.invoke('classes:create', sessionToken, payload),
     update: (payload: unknown) => ipcRenderer.invoke('classes:update', sessionToken, payload),
     deactivate: (id: string) => ipcRenderer.invoke('classes:deactivate', sessionToken, id),
+  },
+
+  datasync: {
+    downloadTemplate: (entityType: string, format: 'csv' | 'xlsx') => ipcRenderer.invoke('datasync:downloadTemplate', sessionToken, entityType, format),
+    chooseImportFile: () => ipcRenderer.invoke('datasync:chooseImportFile', sessionToken),
+    previewImport: (filePath: string, entityType: string) => ipcRenderer.invoke('datasync:previewImport', sessionToken, filePath, entityType),
+    commitImport: (jobId: string, previewRows: any[], atomic: boolean) => ipcRenderer.invoke('datasync:commitImport', sessionToken, jobId, previewRows, atomic),
+    exportData: (entityType: string, format: 'csv' | 'xlsx') => ipcRenderer.invoke('datasync:exportData', sessionToken, entityType, format),
+    getImportJobs: () => ipcRenderer.invoke('datasync:getImportJobs', sessionToken),
+    getExportJobs: () => ipcRenderer.invoke('datasync:getExportJobs', sessionToken),
+    getJobErrors: (jobId: string) => ipcRenderer.invoke('datasync:getJobErrors', sessionToken, jobId),
+  },
+
+  returns: {
+    getSalesHistory: () => ipcRenderer.invoke('returns:getSalesHistory'),
+    getSalesReturnById: (id: string) => ipcRenderer.invoke('returns:getSalesReturnById', id),
+    getSalesReturnsBySale: (invoiceNo: string) => ipcRenderer.invoke('returns:getSalesReturnsBySale', invoiceNo),
+    createSalesReturn: (payload: any) => ipcRenderer.invoke('returns:createSalesReturn', payload),
+    getPurchaseHistory: () => ipcRenderer.invoke('returns:getPurchaseHistory'),
+    getPurchaseReturnById: (id: string) => ipcRenderer.invoke('returns:getPurchaseReturnById', id),
+    getPurchaseReturnsByPurchase: (purchaseId: string) => ipcRenderer.invoke('returns:getPurchaseReturnsByPurchase', purchaseId),
+    createPurchaseReturn: (payload: any) => ipcRenderer.invoke('returns:createPurchaseReturn', payload),
+  },
+
+  receipts: {
+    print: (sale: any, isDuplicate = false) => ipcRenderer.invoke('receipt:print', sale, isDuplicate),
+    printReturn: (salesReturn: any, isDuplicate = false) => ipcRenderer.invoke('receipt:printReturn', salesReturn, isDuplicate),
+    previewReturn: (salesReturn: any, isDuplicate = false) => ipcRenderer.invoke('receipt:previewReturn', salesReturn, isDuplicate),
+    preview: (sale: any, isDuplicate = false) => ipcRenderer.invoke('receipt:preview', sale, isDuplicate),
+    fromSale: (invoiceNo: string) => ipcRenderer.invoke('receipt:fromSale', invoiceNo),
+    duplicateFromSale: (invoiceNo: string) => ipcRenderer.invoke('receipt:duplicateFromSale', invoiceNo),
+    getSettings: () => ipcRenderer.invoke('receipt:getSettings'),
+    updateSettings: (settings: any) => ipcRenderer.invoke('receipt:updateSettings', settings),
+    printKhataPayment: (payment: any, isDuplicate = false) => ipcRenderer.invoke('receipt:printKhataPayment', payment, isDuplicate),
+    previewKhataPayment: (payment: any, isDuplicate = false) => ipcRenderer.invoke('receipt:previewKhataPayment', payment, isDuplicate),
+  },
+
+  khata: {
+    getCustomers: () => ipcRenderer.invoke('khata:getCustomers', sessionToken),
+    getStatement: (customerName: string) => ipcRenderer.invoke('khata:getStatement', sessionToken, customerName),
+    getOverdue: (asOfDate: string) => ipcRenderer.invoke('khata:getOverdue', sessionToken, asOfDate),
+    getReminders: (asOfDate: string) => ipcRenderer.invoke('khata:getReminders', sessionToken, asOfDate),
+    recordPayment: (payload: any) => ipcRenderer.invoke('khata:recordPayment', sessionToken, payload),
+    createAdjustment: (payload: any) => ipcRenderer.invoke('khata:createAdjustment', sessionToken, payload),
+  },
+  
+  discounts: {
+    getAll: () => ipcRenderer.invoke('discounts:getAll'),
+    create: (discount: any) => ipcRenderer.invoke('discounts:create', discount),
+    update: (discount: any) => ipcRenderer.invoke('discounts:update', discount),
+    deactivate: (id: string) => ipcRenderer.invoke('discounts:deactivate', id),
+    getActiveDiscounts: (dateStr?: string) => ipcRenderer.invoke('discounts:getActiveDiscounts', dateStr),
+  },
+
+  priceRules: {
+    getAll: () => ipcRenderer.invoke('priceRules:getAll'),
+    create: (rule: any) => ipcRenderer.invoke('priceRules:create', rule),
+    update: (rule: any) => ipcRenderer.invoke('priceRules:update', rule),
+    deactivate: (id: string) => ipcRenderer.invoke('priceRules:deactivate', id),
+    getActiveRules: (dateStr?: string) => ipcRenderer.invoke('priceRules:getActiveRules', dateStr),
+    getPromotionHistory: () => ipcRenderer.invoke('priceRules:getPromotionHistory'),
+    calculateLineDiscounts: (items: any[], context?: any) => ipcRenderer.invoke('priceRules:calculateLineDiscounts', items, context),
+    calculateInvoiceDiscount: (subtotal: number, discountType: 'fixed' | 'percentage', discountValue: number) => 
+      ipcRenderer.invoke('priceRules:calculateInvoiceDiscount', subtotal, discountType, discountValue),
+  },
+
+  notifications: {
+    getAll: (tab?: string) => ipcRenderer.invoke('notifications:getAll', sessionToken, tab),
+    getUnreadCount: () => ipcRenderer.invoke('notifications:getUnreadCount', sessionToken),
+    markRead: (id: string) => ipcRenderer.invoke('notifications:markRead', sessionToken, id),
+    markAllRead: () => ipcRenderer.invoke('notifications:markAllRead', sessionToken),
+    dismiss: (id: string) => ipcRenderer.invoke('notifications:dismiss', sessionToken, id),
+    scan: (runDate?: string) => ipcRenderer.invoke('notifications:scan', sessionToken, runDate),
+  },
+
+  notificationRules: {
+    getRules: () => ipcRenderer.invoke('notificationRules:getRules', sessionToken),
+    updateRules: (settings: Record<string, string>) => ipcRenderer.invoke('notificationRules:updateRules', sessionToken, settings),
   }
 });

@@ -12,7 +12,9 @@ function requireClassManage(token: string) {
 
 export function registerClassHandlers() {
   ipcMain.handle('classes:getAll', (_, token: string) => {
-    AuthRepository.requirePermission(token, 'reports.view');
+    if (!AuthRepository.hasPermission(token, 'reports.view') && !AuthRepository.hasPermission(token, 'branch.manage')) {
+      throw new Error('Unauthorized: reports.view or branch.manage permission is required.');
+    }
     return ClassRepository.getAll();
   });
   ipcMain.handle('classes:create', (_, token: string, payload: any) => {

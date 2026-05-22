@@ -46,13 +46,32 @@ export interface Brand {
 export interface CartItem {
   product: Product;
   quantity: number;
+  discount_type?: 'percentage' | 'fixed';
+  discount_value?: number;
 }
 
 export interface Sale {
   invoiceNo: string;
+  branch_id?: string;
+  branch_name?: string;
+  class_id?: string | null;
   customerName: string;
+  customer_id?: string | null;
+  customer_type?: 'WALK_IN' | 'REGISTERED';
+  cashier_id?: string | null;
+  cashier_name?: string | null;
+  shift_id?: string | null;
+  register_id?: string | null;
+  sale_time?: string;
+  payment_method?: string;
   date: string;
   total: number;
+  subtotal?: number;
+  discount_type?: 'percentage' | 'fixed';
+  discount_value?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  total_amount?: number;
   status: 'Paid' | 'Credit';
   created_at?: string;
   updated_at?: string;
@@ -61,6 +80,8 @@ export interface Sale {
 
 export interface Expense {
   id: string;
+  branch_id?: string;
+  class_id?: string | null;
   date: string;
   category: string;
   amount: number;
@@ -72,8 +93,14 @@ export interface Expense {
 export interface Customer {
   name: string;
   phone: string;
+  whatsapp?: string;
+  address?: string;
+  opening_balance?: number;
   totalPurchases: number;
   credit: number; // Outstanding Udhaar balance
+  credit_limit?: number;
+  due_days?: number;
+  status?: 'active' | 'inactive';
   lastPayment: string;
 }
 
@@ -91,6 +118,26 @@ export interface User {
   branches?: Branch[];
   permissions?: string[];
   created_at?: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  type: string;
+  category: 'inventory' | 'customers' | 'suppliers' | 'system';
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  message: string;
+  branch_id?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  due_date?: string | null;
+  status: 'unread' | 'read' | 'dismissed';
+  read_at?: string | null;
+  rule_key?: string | null;
+  dedupe_key?: string | null;
+  metadata_json?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Branch {
@@ -116,6 +163,201 @@ export interface ClassTracking {
   status: 'active' | 'inactive';
   created_at?: string;
   updated_at?: string;
+}
+
+export interface BudgetLine {
+  id?: string;
+  budget_id?: string;
+  account_id: string;
+  account_code?: string;
+  account_name?: string;
+  account_type?: string;
+  period_start?: string;
+  period_end?: string;
+  amount: number;
+  notes?: string;
+}
+
+export interface Budget {
+  id: string;
+  name: string;
+  period_type: 'monthly' | 'quarterly' | 'yearly';
+  date_from: string;
+  date_to: string;
+  branch_id?: string | null;
+  branch_code?: string;
+  branch_name?: string;
+  class_id?: string | null;
+  class_code?: string;
+  class_name?: string;
+  status: 'Draft' | 'Active' | 'Closed' | 'inactive';
+  notes?: string;
+  total_budget?: number;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  lines?: BudgetLine[];
+}
+
+export interface RecurringTemplate {
+  id: string;
+  name: string;
+  template_type: 'invoice' | 'purchase' | 'expense' | 'journal';
+  frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  start_date: string;
+  end_date?: string | null;
+  next_run_date: string;
+  auto_create: number;
+  status: 'active' | 'inactive';
+  branch_id?: string | null;
+  branch_code?: string;
+  branch_name?: string;
+  class_id?: string | null;
+  class_code?: string;
+  class_name?: string;
+  payload?: Record<string, any>;
+  payload_json?: string;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RecurringRun {
+  id: string;
+  template_id: string;
+  template_name?: string;
+  run_date: string;
+  status: 'success' | 'failed' | 'skipped';
+  created_transaction_type?: string | null;
+  created_transaction_id?: string | null;
+  error_message?: string | null;
+  created_at?: string;
+}
+
+export interface Employee {
+  id: string;
+  branch_id?: string | null;
+  branch_code?: string;
+  branch_name?: string;
+  employee_code: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  designation?: string;
+  hourly_rate: number;
+  monthly_salary: number;
+  status: 'active' | 'inactive';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Timesheet {
+  id: string;
+  employee_id: string;
+  employee_code?: string;
+  employee_name?: string;
+  designation?: string;
+  hourly_rate?: number;
+  branch_id?: string | null;
+  branch_code?: string;
+  branch_name?: string;
+  work_date: string;
+  clock_in?: string | null;
+  clock_out?: string | null;
+  break_minutes: number;
+  total_hours: number;
+  entry_type: 'clock' | 'manual';
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_by?: string | null;
+  approved_at?: string | null;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Currency {
+  code: string;
+  name: string;
+  symbol: string;
+  decimal_precision: number;
+  is_base: number;
+  status: 'active' | 'inactive';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExchangeRate {
+  id: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  effective_date: string;
+  manual_override: number;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BranchInventory {
+  branch_id: string;
+  product_id: string;
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  reorder_level: number;
+  average_cost: number;
+  valuation_method: string;
+  batch_lot_hint?: string;
+  product_name?: string;
+  sku?: string;
+  branch_code?: string;
+  branch_name?: string;
+  available_quantity?: number;
+  inventory_value?: number;
+  updated_at?: string;
+}
+
+export interface StockTransfer {
+  id: string;
+  transfer_no: string;
+  source_branch_id: string;
+  destination_branch_id: string;
+  status: 'Pending' | 'Approved' | 'In Transit' | 'Completed' | 'Rejected';
+  request_date: string;
+  notes?: string;
+  items?: StockTransferItem[];
+}
+
+export interface StockTransferItem {
+  id?: string;
+  transfer_id?: string;
+  product_id: string;
+  product_name?: string;
+  quantity: number;
+  unit_cost?: number;
+}
+
+export interface InventoryAdjustment {
+  id: string;
+  branch_id: string;
+  adjustment_date: string;
+  adjustment_type: 'Damage' | 'Shrinkage' | 'Manual Correction' | 'Opening Stock';
+  reason: string;
+  notes?: string;
+  status: string;
+  accounting_status: string;
+  items?: InventoryAdjustmentItem[];
+}
+
+export interface InventoryAdjustmentItem {
+  id?: string;
+  adjustment_id?: string;
+  product_id: string;
+  product_name?: string;
+  quantity_change: number;
+  unit_cost?: number;
+  value_change?: number;
+  previous_quantity?: number;
+  new_quantity?: number;
 }
 
 export interface Tenant {
@@ -160,6 +402,7 @@ export interface Purchase {
   id: string;
   tenant_id: string;
   branch_id: string;
+  class_id?: string | null;
   supplier_id: string;
   supplier_name?: string;
   purchase_invoice_no?: string;
@@ -186,6 +429,8 @@ export interface CreatePurchaseInput extends Partial<Purchase> {
 export interface StockMovement {
   id: string;
   product_id: string;
+  branch_id?: string;
+  class_id?: string | null;
   movement_type: 'OPENING' | 'PURCHASE' | 'SALE' | 'ADJUSTMENT' | 'RETURN' | 'DAMAGE';
   quantity_in: number;
   quantity_out: number;
@@ -297,6 +542,14 @@ export interface Invoice {
   id: string;
   invoice_no: string;
   customer_name: string;
+  customer_id?: string | null;
+  customer_type?: 'WALK_IN' | 'REGISTERED';
+  cashier_id?: string | null;
+  cashier_name?: string | null;
+  branch_id?: string;
+  branch_name?: string | null;
+  shift_id?: string | null;
+  register_id?: string | null;
   invoice_date: string;
   due_date?: string;
   status: InvoiceStatus;

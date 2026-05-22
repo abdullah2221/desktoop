@@ -153,10 +153,8 @@ export const InventoryPage: React.FC = () => {
 
       if (result.success) {
         setSuccessMsg(selectedProduct?.id ? 'Product updated successfully.' : 'Product created successfully.');
-        setTimeout(() => {
-          setView('list');
-          setSelectedProduct(null);
-        }, 1000);
+        setView('list');
+        setSelectedProduct(null);
       } else {
         setErrorMsg(result.message || 'Failed to save product. Ensure SKU is unique.');
       }

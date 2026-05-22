@@ -1,4 +1,6 @@
 import { getDatabase } from '../connection';
+import { CurrencyRepository } from './CurrencyRepository';
+import { ExchangeRateRepository } from './ExchangeRateRepository';
 
 export class JournalRepository {
   static getAllJournals() {
@@ -56,14 +58,19 @@ export class JournalRepository {
 
     const transaction = db.transaction((data: any) => {
       const journalId = data.id || `JE-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const baseCurrency = (CurrencyRepository.getBaseCurrency() as any).code || 'PKR';
+      const currencyCode = (data.currency_code || baseCurrency).toUpperCase();
+      const exchangeRate = data.exchange_rate || ExchangeRateRepository.getRate(currencyCode, baseCurrency, data.entry_date || new Date().toISOString().split('T')[0]);
       
       const insertJE = db.prepare(`
         INSERT INTO journal_entries (
           id, entry_no, entry_date, description, reference_type, 
-          reference_id, branch_id, class_id, total_debit, total_credit, status, created_by
+          reference_id, branch_id, class_id, total_debit, total_credit, status, created_by,
+          currency_code, exchange_rate, base_total_debit, base_total_credit
         ) VALUES (
           @id, @entry_no, @entry_date, @description, @reference_type,
-          @reference_id, @branch_id, @class_id, @total_debit, @total_credit, @status, @created_by
+          @reference_id, @branch_id, @class_id, @total_debit, @total_credit, @status, @created_by,
+          @currency_code, @exchange_rate, @base_total_debit, @base_total_credit
         )
       `);
 
@@ -79,7 +86,11 @@ export class JournalRepository {
         total_debit: totalDebit,
         total_credit: totalCredit,
         status: data.status || 'posted',
-        created_by: data.created_by || null
+        created_by: data.created_by || null,
+        currency_code: currencyCode,
+        exchange_rate: exchangeRate,
+        base_total_debit: Number((totalDebit * exchangeRate).toFixed(4)),
+        base_total_credit: Number((totalCredit * exchangeRate).toFixed(4))
       });
 
       const insertLine = db.prepare(`

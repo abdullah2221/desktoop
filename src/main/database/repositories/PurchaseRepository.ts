@@ -4,6 +4,8 @@ import { SupplierRepository } from './SupplierRepository';
 import { AuditLogRepository } from './AuditLogRepository';
 import { AccountingPostingService } from './AccountingPostingService';
 import { TaxRepository } from './TaxRepository';
+import { CurrencyRepository } from './CurrencyRepository';
+import { ExchangeRateRepository } from './ExchangeRateRepository';
 
 export class PurchaseRepository {
   static getAll() {
@@ -49,35 +51,53 @@ export class PurchaseRepository {
     // Setup transaction
     const transaction = db.transaction((purchaseData: any) => {
       const purchaseId = purchaseData.id || `PUR-${Date.now()}`;
+      const branchId = purchaseData.branch_id || 'B001';
+      const classId = purchaseData.class_id || null;
+      const baseCurrency = (CurrencyRepository.getBaseCurrency() as any).code || 'PKR';
+      const currencyCode = (purchaseData.currency_code || baseCurrency).toUpperCase();
+      const exchangeRate = purchaseData.exchange_rate || ExchangeRateRepository.getRate(currencyCode, baseCurrency, purchaseData.date || new Date().toISOString().split('T')[0]);
+      const originalGrandTotal = Number(purchaseData.grand_total || 0);
+      const baseGrandTotal = Number((originalGrandTotal * exchangeRate).toFixed(4));
+      const baseAmountPaid = Number((Number(purchaseData.amount_paid || 0) * exchangeRate).toFixed(4));
+      const baseRemainingPayable = Number((Number(purchaseData.remaining_payable || Math.max(0, originalGrandTotal - Number(purchaseData.amount_paid || 0))) * exchangeRate).toFixed(4));
+      const baseTax = Number((Number(purchaseData.tax || 0) * exchangeRate).toFixed(4));
       
       // 1. Insert Purchase
       const insertPurchase = db.prepare(`
         INSERT INTO purchases (
-          id, tenant_id, branch_id, supplier_id, date, 
+          id, tenant_id, branch_id, class_id, supplier_id, date, 
           total, status, payment_status, discount, tax, 
-          grand_total, amount_paid, remaining_payable, notes, tax_code, tax_mode
+          grand_total, amount_paid, remaining_payable, notes, tax_code, tax_mode,
+          currency_code, exchange_rate, original_grand_total, base_grand_total
         ) VALUES (
-          @id, 'T001', 'B001', @supplier_id, @date,
+          @id, 'T001', @branch_id, @class_id, @supplier_id, @date,
           @subtotal, @status, @payment_status, @discount, @tax,
-          @grand_total, @amount_paid, @remaining_payable, @notes, @tax_code, @tax_mode
+          @grand_total, @amount_paid, @remaining_payable, @notes, @tax_code, @tax_mode,
+          @currency_code, @exchange_rate, @original_grand_total, @base_grand_total
         )
       `);
       
       insertPurchase.run({
         id: purchaseId,
+        branch_id: branchId,
+        class_id: classId,
         supplier_id: purchaseData.supplier_id,
         date: purchaseData.date || new Date().toISOString(),
-        subtotal: purchaseData.subtotal || 0,
+        subtotal: Number((Number(purchaseData.subtotal || 0) * exchangeRate).toFixed(4)),
         status: purchaseData.status || 'Completed',
         payment_status: purchaseData.payment_status || 'Paid',
-        discount: purchaseData.discount || 0,
-        tax: purchaseData.tax || 0,
-        grand_total: purchaseData.grand_total || 0,
-        amount_paid: purchaseData.amount_paid || 0,
-        remaining_payable: purchaseData.remaining_payable || 0,
+        discount: Number((Number(purchaseData.discount || 0) * exchangeRate).toFixed(4)),
+        tax: baseTax,
+        grand_total: baseGrandTotal,
+        amount_paid: baseAmountPaid,
+        remaining_payable: baseRemainingPayable,
         notes: purchaseData.notes || '',
         tax_code: purchaseData.tax_code || TaxRepository.getDefaultTaxCode('purchase'),
-        tax_mode: purchaseData.tax_mode || 'exclusive'
+        tax_mode: purchaseData.tax_mode || 'exclusive',
+        currency_code: currencyCode,
+        exchange_rate: exchangeRate,
+        original_grand_total: originalGrandTotal,
+        base_grand_total: baseGrandTotal
       });
 
       // 2. Insert Purchase Items & 3. Update Stock & 4. Insert Stock Movement & 5. Update Product Purchase Cost
@@ -91,11 +111,11 @@ export class PurchaseRepository {
 
       const insertStockMovement = db.prepare(`
         INSERT INTO stock_movements (
-          id, tenant_id, branch_id, product_id, movement_type, 
+          id, tenant_id, branch_id, class_id, product_id, movement_type, 
           quantity_in, reference_type, reference_id, 
           previous_stock, new_stock, date, notes
         ) VALUES (
-          @id, 'T001', 'B001', @product_id, 'PURCHASE', 
+          @id, 'T001', @branch_id, @class_id, @product_id, 'PURCHASE', 
           @quantity_in, 'PURCHASE', @reference_id, 
           @previous_stock, @new_stock, @date, @notes
         )
@@ -130,6 +150,8 @@ export class PurchaseRepository {
           // Insert Stock Movement
           insertStockMovement.run({
             id: `SM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            branch_id: branchId,
+            class_id: classId,
             product_id: item.product_id,
             quantity_in: item.quantity,
             reference_id: purchaseId,
@@ -158,36 +180,38 @@ export class PurchaseRepository {
             id, tenant_id, branch_id, supplier_id, date, type, 
             reference_id, debit, credit, balance, notes
           ) VALUES (
-            @id, 'T001', 'B001', @supplier_id, @date, 'PURCHASE', 
+            @id, 'T001', @branch_id, @supplier_id, @date, 'PURCHASE', 
             @reference_id, 0, @credit, @balance, @notes
           )
         `).run({
           id: purchaseLedgerId,
+          branch_id: branchId,
           supplier_id: purchaseData.supplier_id,
           date: new Date().toISOString(),
           reference_id: purchaseId,
-          credit: purchaseData.grand_total,
-          balance: currentBalance + purchaseData.grand_total,
+          credit: baseGrandTotal,
+          balance: currentBalance + baseGrandTotal,
           notes: `Purchase Invoice ${purchaseData.purchase_invoice_no || purchaseId}`
         });
         
-        newBalance += purchaseData.grand_total;
+        newBalance += baseGrandTotal;
 
-        if (purchaseData.amount_paid > 0) {
+        if (baseAmountPaid > 0) {
           const paymentLedgerId = `LEDG-${Date.now()}-PY`;
           const paymentId = `SP-${Date.now()}`;
           
           db.prepare(`
             INSERT INTO supplier_payments (
-              id, tenant_id, branch_id, supplier_id, date, amount, payment_method, reference_no, notes
-            ) VALUES (
-              @id, 'T001', 'B001', @supplier_id, @date, @amount, @payment_method, @reference_no, @notes
+            id, tenant_id, branch_id, supplier_id, date, amount, payment_method, reference_no, notes
+          ) VALUES (
+              @id, 'T001', @branch_id, @supplier_id, @date, @amount, @payment_method, @reference_no, @notes
             )
           `).run({
             id: paymentId,
+            branch_id: branchId,
             supplier_id: purchaseData.supplier_id,
             date: new Date().toISOString(),
-            amount: purchaseData.amount_paid,
+            amount: baseAmountPaid,
             payment_method: purchaseData.payment_method || 'Cash',
             reference_no: purchaseId,
             notes: `Payment for Purchase ${purchaseData.purchase_invoice_no || purchaseId}`
@@ -198,20 +222,21 @@ export class PurchaseRepository {
               id, tenant_id, branch_id, supplier_id, date, type, 
               reference_id, debit, credit, balance, notes
             ) VALUES (
-              @id, 'T001', 'B001', @supplier_id, @date, 'PAYMENT', 
+              @id, 'T001', @branch_id, @supplier_id, @date, 'PAYMENT', 
               @reference_id, @debit, 0, @balance, @notes
             )
           `).run({
             id: paymentLedgerId,
+            branch_id: branchId,
             supplier_id: purchaseData.supplier_id,
             date: new Date().toISOString(),
             reference_id: paymentId,
-            debit: purchaseData.amount_paid,
-            balance: newBalance - purchaseData.amount_paid,
+            debit: baseAmountPaid,
+            balance: newBalance - baseAmountPaid,
             notes: `Payment for Purchase Invoice ${purchaseData.purchase_invoice_no || purchaseId}`
           });
           
-          newBalance -= purchaseData.amount_paid;
+          newBalance -= baseAmountPaid;
         }
 
         // Update Supplier Balance
@@ -228,9 +253,11 @@ export class PurchaseRepository {
         AccountingPostingService.postPurchase({
           purchaseId,
           date: purchaseData.date || new Date().toISOString(),
-          grandTotal: purchaseData.grand_total || 0,
-          amountPaid: purchaseData.amount_paid || 0,
-          taxAmount: purchaseData.tax || 0
+          grandTotal: baseGrandTotal,
+          amountPaid: baseAmountPaid,
+          taxAmount: baseTax,
+          branchId,
+          classId
         });
       } catch (err) {
         console.error('[PurchaseRepository] Accounting auto-post failed:', err);

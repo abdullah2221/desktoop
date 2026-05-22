@@ -55,6 +55,8 @@ function AppContent() {
       hasPermission={hasPermission}
       onBranchChange={setActiveBranch}
       onLogout={logout}
+      onOpenNotifications={() => setActiveTab('notifications')}
+      userRole={activeUser?.role_name || activeUser?.role || ''}
     >
       {/* CHECKOUT NOTIFICATION */}
       {checkoutNotification && (

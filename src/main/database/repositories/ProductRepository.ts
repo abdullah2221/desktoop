@@ -44,6 +44,52 @@ export class ProductRepository {
     `).get(id);
   }
 
+  static getByBarcode(barcode: string) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT 
+        p.*,
+        p.cost as purchase_cost,
+        p.price as sale_price,
+        p.stock as stock_quantity,
+        c.name as category_name,
+        s.name as supplier_name,
+        u.name as unit_name,
+        b.name as brand_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      LEFT JOIN units u ON p.unit_id = u.id
+      LEFT JOIN brands b ON p.brand_id = b.id
+      WHERE p.barcode = ? AND p.status = 'active'
+    `).get(barcode);
+  }
+
+  static searchByBarcodeOrSku(query: string) {
+    const db = getDatabase();
+    const cleanQuery = `%${query}%`;
+    return db.prepare(`
+      SELECT 
+        p.*,
+        p.cost as purchase_cost,
+        p.price as sale_price,
+        p.stock as stock_quantity,
+        c.name as category_name,
+        s.name as supplier_name,
+        u.name as unit_name,
+        b.name as brand_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      LEFT JOIN units u ON p.unit_id = u.id
+      LEFT JOIN brands b ON p.brand_id = b.id
+      WHERE (p.barcode = ? OR p.sku = ? OR p.name LIKE ?) AND p.status = 'active'
+      ORDER BY p.name ASC
+      LIMIT 20
+    `).all(query, query, cleanQuery);
+  }
+
+
   static getLowStock() {
     const db = getDatabase();
     return db.prepare(`

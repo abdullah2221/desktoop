@@ -15,6 +15,8 @@ interface MainLayoutProps {
   hasPermission?: (permission: string) => boolean;
   onBranchChange?: (branchId: string) => void;
   onLogout?: () => void;
+  onOpenNotifications?: () => void;
+  userRole?: string;
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
@@ -28,12 +30,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   activeBranchId,
   hasPermission,
   onBranchChange,
-  onLogout
+  onLogout,
+  onOpenNotifications,
+  userRole
 }) => {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 select-none">
       {/* Sidebar Navigation */}
-      <Sidebar activeTab={activeTab} onTabChange={onTabChange} hasPermission={hasPermission} />
+      <Sidebar activeTab={activeTab} onTabChange={onTabChange} hasPermission={hasPermission} userRole={userRole} />
 
       {/* Main Content Area */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -46,6 +50,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           activeBranchId={activeBranchId}
           onBranchChange={onBranchChange}
           onLogout={onLogout}
+          onOpenNotifications={onOpenNotifications}
         />
 
         {/* Content view with scroll support */}

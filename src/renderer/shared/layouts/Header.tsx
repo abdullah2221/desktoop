@@ -6,8 +6,10 @@ import {
   Clock 
   ,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Bell
 } from 'lucide-react';
+import type { NotificationItem } from '../types';
 import type { Branch } from '../types';
 
 interface HeaderProps {
@@ -18,6 +20,7 @@ interface HeaderProps {
   activeBranchId?: string;
   onBranchChange?: (branchId: string) => void;
   onLogout?: () => void;
+  onOpenNotifications?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -27,13 +30,42 @@ export const Header: React.FC<HeaderProps> = ({
   branches = [],
   activeBranchId = '',
   onBranchChange,
-  onLogout
+  onLogout,
+  onOpenNotifications
 }) => {
   const [time, setTime] = useState(new Date());
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [recentNotifications, setRecentNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const [count, rows] = await Promise.all([
+          window.api.notifications.getUnreadCount(),
+          window.api.notifications.getAll('all')
+        ]);
+        if (!mounted) return;
+        setUnreadCount(Number(count || 0));
+        setRecentNotifications((rows as NotificationItem[]).slice(0, 5));
+      } catch {
+        if (!mounted) return;
+        setUnreadCount(0);
+        setRecentNotifications([]);
+      }
+    };
+    refresh();
+    const poll = setInterval(refresh, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(poll);
+    };
   }, []);
 
   const formatDate = (date: Date) => {
@@ -105,6 +137,49 @@ export const Header: React.FC<HeaderProps> = ({
             <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span>{formatTime(time)}</span>
           </div>
+        </div>
+
+        <div className="relative">
+          <button
+            className="relative p-2 rounded-[4px] border border-slate-200 text-slate-600 hover:bg-slate-50"
+            onClick={() => setShowNotifications((prev) => !prev)}
+            title="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold bg-red-600 text-white flex items-center justify-center">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+          {showNotifications && (
+            <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-[6px] shadow-lg z-50">
+              <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800">Notifications</span>
+                <button className="text-[11px] text-primary-blue font-semibold hover:underline" onClick={async () => { await window.api.notifications.markAllRead(); setUnreadCount(0); }}>Mark all read</button>
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {recentNotifications.length === 0 && <p className="p-3 text-xs text-slate-500">No notifications.</p>}
+                {recentNotifications.map((item) => (
+                  <button
+                    key={item.id}
+                    className="w-full text-left p-3 border-b border-slate-100 hover:bg-slate-50"
+                    onClick={async () => {
+                      if (item.status === 'unread') await window.api.notifications.markRead(item.id);
+                      setShowNotifications(false);
+                      onOpenNotifications?.();
+                    }}
+                  >
+                    <p className="text-xs font-semibold text-slate-800">{item.title}</p>
+                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{item.message}</p>
+                  </button>
+                ))}
+              </div>
+              <button className="w-full p-2 text-xs text-primary-blue font-bold hover:bg-slate-50" onClick={() => { setShowNotifications(false); onOpenNotifications?.(); }}>
+                Open Notification Center
+              </button>
+            </div>
+          )}
         </div>
 
         {/* User Card */}

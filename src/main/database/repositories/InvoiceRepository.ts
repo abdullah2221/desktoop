@@ -2,6 +2,8 @@ import { getDatabase } from '../connection';
 import { AuditLogRepository } from './AuditLogRepository';
 import { AccountingPostingService } from './AccountingPostingService';
 import { TaxRepository } from './TaxRepository';
+import { ExchangeRateRepository } from './ExchangeRateRepository';
+import { CurrencyRepository } from './CurrencyRepository';
 
 export interface InvoiceItemInput {
   product_id: string;
@@ -16,6 +18,14 @@ export interface InvoicePayload {
   id?: string;
   invoice_no?: string;
   customer_name: string;
+  customer_id?: string | null;
+  customer_type?: 'WALK_IN' | 'REGISTERED';
+  cashier_id?: string | null;
+  cashier_name?: string | null;
+  branch_id?: string;
+  branch_name?: string | null;
+  shift_id?: string | null;
+  register_id?: string | null;
   invoice_date: string;
   due_date?: string;
   status?: 'Draft' | 'Unpaid' | 'Partially Paid' | 'Paid' | 'Void';
@@ -25,6 +35,8 @@ export interface InvoicePayload {
   tax_code?: string;
   tax_mode?: 'inclusive' | 'exclusive';
   tax_amount?: number;
+  currency_code?: string;
+  exchange_rate?: number;
   grand_total: number;
   amount_paid?: number;
   balance_due?: number;
@@ -46,42 +58,90 @@ export class InvoiceRepository {
     return { ...invoice, items };
   }
 
+  static getRecent(filters: { cashier_id?: string; branch_id?: string; date_from?: string; date_to?: string; limit?: number } = {}) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT *
+      FROM invoices
+      WHERE (@cashier_id IS NULL OR cashier_id=@cashier_id)
+        AND (@branch_id IS NULL OR branch_id=@branch_id)
+        AND (@date_from IS NULL OR invoice_date >= @date_from)
+        AND (@date_to IS NULL OR invoice_date <= @date_to)
+      ORDER BY invoice_date DESC, created_at DESC
+      LIMIT @limit
+    `).all({
+      cashier_id: filters.cashier_id || null,
+      branch_id: filters.branch_id || null,
+      date_from: filters.date_from || null,
+      date_to: filters.date_to || null,
+      limit: Math.max(1, Math.min(Number(filters.limit || 10), 100))
+    });
+  }
+
   static create(payload: InvoicePayload) {
     const db = getDatabase();
     const tx = db.transaction((data: InvoicePayload) => {
       const id = data.id || `SI-${Date.now()}`;
       const invoiceNo = data.invoice_no || `INVX-${Date.now()}`;
       const status = data.status || 'Draft';
-      const amountPaid = data.amount_paid || 0;
-      const balanceDue = data.balance_due ?? Math.max(0, data.grand_total - amountPaid);
+      const baseCurrency = (CurrencyRepository.getBaseCurrency() as any).code || 'PKR';
+      const currencyCode = (data.currency_code || baseCurrency).toUpperCase();
+      const exchangeRate = data.exchange_rate || ExchangeRateRepository.getRate(currencyCode, baseCurrency, data.invoice_date);
+      const originalSubtotal = data.subtotal;
+      const originalTaxTotal = data.tax_total;
+      const originalGrandTotal = data.grand_total;
+      const subtotal = Number((originalSubtotal * exchangeRate).toFixed(4));
+      const taxTotal = Number((originalTaxTotal * exchangeRate).toFixed(4));
+      const taxAmount = Number(((data.tax_amount || data.tax_total || 0) * exchangeRate).toFixed(4));
+      const grandTotal = Number((originalGrandTotal * exchangeRate).toFixed(4));
+      const amountPaid = Number(((data.amount_paid || 0) * exchangeRate).toFixed(4));
+      const balanceDue = data.balance_due !== undefined ? Number((data.balance_due * exchangeRate).toFixed(4)) : Math.max(0, grandTotal - amountPaid);
 
       db.prepare(`
         INSERT INTO invoices (
-          id, invoice_no, tenant_id, branch_id, customer_name, invoice_date, due_date,
+          id, invoice_no, tenant_id, branch_id, branch_name, customer_name, customer_id, customer_type,
+          cashier_id, cashier_name, shift_id, register_id, invoice_date, due_date,
           status, subtotal, discount_total, tax_total, grand_total, amount_paid, balance_due,
-          stock_posted, accounting_posted, notes, tax_code, tax_mode, tax_amount
+          stock_posted, accounting_posted, notes, tax_code, tax_mode, tax_amount,
+          currency_code, exchange_rate, original_subtotal, original_tax_total, original_grand_total, base_grand_total
         ) VALUES (
-          @id, @invoice_no, 'T001', 'B001', @customer_name, @invoice_date, @due_date,
+          @id, @invoice_no, 'T001', @branch_id, @branch_name, @customer_name, @customer_id, @customer_type,
+          @cashier_id, @cashier_name, @shift_id, @register_id, @invoice_date, @due_date,
           @status, @subtotal, @discount_total, @tax_total, @grand_total, @amount_paid, @balance_due,
-          0, 0, @notes, @tax_code, @tax_mode, @tax_amount
+          0, 0, @notes, @tax_code, @tax_mode, @tax_amount,
+          @currency_code, @exchange_rate, @original_subtotal, @original_tax_total, @original_grand_total, @base_grand_total
         )
       `).run({
         id,
         invoice_no: invoiceNo,
+        branch_id: data.branch_id || 'B001',
+        branch_name: data.branch_name || '',
         customer_name: data.customer_name,
+        customer_id: data.customer_id || null,
+        customer_type: data.customer_type || (data.customer_id ? 'REGISTERED' : 'WALK_IN'),
+        cashier_id: data.cashier_id || null,
+        cashier_name: data.cashier_name || 'System Cashier',
+        shift_id: data.shift_id || null,
+        register_id: data.register_id || null,
         invoice_date: data.invoice_date,
         due_date: data.due_date || data.invoice_date,
         status,
-        subtotal: data.subtotal,
-        discount_total: data.discount_total,
-        tax_total: data.tax_total,
-        grand_total: data.grand_total,
+        subtotal,
+        discount_total: Number((data.discount_total * exchangeRate).toFixed(4)),
+        tax_total: taxTotal,
+        grand_total: grandTotal,
         tax_code: data.tax_code || TaxRepository.getDefaultTaxCode('sales'),
         tax_mode: data.tax_mode || 'exclusive',
-        tax_amount: data.tax_amount || data.tax_total || 0,
+        tax_amount: taxAmount,
         amount_paid: amountPaid,
         balance_due: balanceDue,
-        notes: data.notes || ''
+        notes: data.notes || '',
+        currency_code: currencyCode,
+        exchange_rate: exchangeRate,
+        original_subtotal: originalSubtotal,
+        original_tax_total: originalTaxTotal,
+        original_grand_total: originalGrandTotal,
+        base_grand_total: grandTotal
       });
 
       this.replaceItemsInternal(id, data.items);
@@ -110,6 +170,8 @@ export class InvoiceRepository {
       const info = db.prepare(`
         UPDATE invoices
         SET customer_name = @customer_name,
+            customer_id = @customer_id,
+            customer_type = @customer_type,
             invoice_date = @invoice_date,
             due_date = @due_date,
             subtotal = @subtotal,
@@ -127,6 +189,8 @@ export class InvoiceRepository {
       `).run({
         id: data.id,
         customer_name: data.customer_name,
+        customer_id: data.customer_id || null,
+        customer_type: data.customer_type || (data.customer_id ? 'REGISTERED' : 'WALK_IN'),
         invoice_date: data.invoice_date,
         due_date: data.due_date || data.invoice_date,
         subtotal: data.subtotal,

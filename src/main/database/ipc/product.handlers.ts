@@ -10,6 +10,15 @@ export function registerProductHandlers() {
     return ProductRepository.getById(id);
   });
 
+  ipcMain.handle('products:getByBarcode', (_, barcode: string) => {
+    return ProductRepository.getByBarcode(barcode);
+  });
+
+  ipcMain.handle('products:searchByBarcodeOrSku', (_, query: string) => {
+    return ProductRepository.searchByBarcodeOrSku(query);
+  });
+
+
   ipcMain.handle('products:getLowStock', () => {
     return ProductRepository.getLowStock();
   });

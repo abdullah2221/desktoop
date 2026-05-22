@@ -18,6 +18,8 @@ export class AccountingPostingService {
     status: 'Paid' | 'Credit';
     cogsAmount: number;
     taxAmount?: number;
+    branchId?: string;
+    classId?: string | null;
   }) {
     const receivableAccount = params.status === 'Paid' ? '1000' : '1100';
 
@@ -27,6 +29,8 @@ export class AccountingPostingService {
       description: `Auto posting for sale ${params.invoiceNo}`,
       reference_type: 'SALE',
       reference_id: params.invoiceNo,
+      branch_id: params.branchId || 'B001',
+      class_id: params.classId || null,
       lines: [
         { account_id: getAccountIdByCode(receivableAccount), description: 'Sale receipt/receivable', debit: params.total, credit: 0 },
         { account_id: getAccountIdByCode('4000'), description: 'Sales income', debit: 0, credit: params.total - (params.taxAmount || 0) },
@@ -43,6 +47,8 @@ export class AccountingPostingService {
         description: `Auto COGS posting for sale ${params.invoiceNo}`,
         reference_type: 'SALE',
         reference_id: params.invoiceNo,
+        branch_id: params.branchId || 'B001',
+        class_id: params.classId || null,
         lines: [
           { account_id: getAccountIdByCode('5000'), description: 'COGS', debit: params.cogsAmount, credit: 0 },
           { account_id: getAccountIdByCode('1200'), description: 'Inventory reduction', debit: 0, credit: params.cogsAmount }
@@ -57,6 +63,8 @@ export class AccountingPostingService {
     grandTotal: number;
     amountPaid: number;
     taxAmount?: number;
+    branchId?: string;
+    classId?: string | null;
   }) {
     const creditAccount = params.amountPaid >= params.grandTotal ? '1000' : '2000';
 
@@ -66,6 +74,8 @@ export class AccountingPostingService {
       description: `Auto posting for purchase ${params.purchaseId}`,
       reference_type: 'PURCHASE',
       reference_id: params.purchaseId,
+      branch_id: params.branchId || 'B001',
+      class_id: params.classId || null,
       lines: [
         { account_id: getAccountIdByCode('1200'), description: 'Inventory purchase', debit: params.grandTotal - (params.taxAmount || 0), credit: 0 },
         ...(params.taxAmount && params.taxAmount > 0
@@ -76,13 +86,15 @@ export class AccountingPostingService {
     });
   }
 
-  static postExpense(params: { expenseId: string; date: string; amount: number; taxAmount?: number }) {
+  static postExpense(params: { expenseId: string; date: string; amount: number; taxAmount?: number; branchId?: string; classId?: string | null }) {
     JournalRepository.createJournal({
       entry_no: `AUTO-EXP-${params.expenseId}`,
       entry_date: params.date,
       description: `Auto posting for expense ${params.expenseId}`,
       reference_type: 'EXPENSE',
       reference_id: params.expenseId,
+      branch_id: params.branchId || 'B001',
+      class_id: params.classId || null,
       lines: [
         { account_id: getAccountIdByCode('6000'), description: 'Operating expense', debit: params.amount - (params.taxAmount || 0), credit: 0 },
         ...(params.taxAmount && params.taxAmount > 0
@@ -152,6 +164,95 @@ export class AccountingPostingService {
       lines: [
         { account_id: getAccountIdByCode(debitAccount), description: 'Cash/Bank received', debit: params.amount, credit: 0 },
         { account_id: getAccountIdByCode('1100'), description: 'Accounts receivable reduced', debit: 0, credit: params.amount }
+      ]
+    });
+  }
+
+  static postSalesReturn(params: {
+    returnId: string;
+    saleId: string;
+    date: string;
+    total: number;
+    refundMethod: 'Cash' | 'Bank' | 'Store Credit';
+    cogsAmount: number;
+    taxAmount?: number;
+    branchId?: string;
+    classId?: string | null;
+  }) {
+    // If credit return (refundMethod is Store Credit or customer balance credit reversal), reverse via Accounts Receivable (1100), otherwise Cash (1000) or Bank (1010)
+    let refundAccount = '1000';
+    if (params.refundMethod === 'Bank') {
+      refundAccount = '1010';
+    } else if (params.refundMethod === 'Store Credit') {
+      refundAccount = '1100'; // reverse accounts receivable
+    }
+
+    JournalRepository.createJournal({
+      entry_no: `AUTO-SR-${params.returnId}`,
+      entry_date: params.date,
+      description: `Auto posting for sales return ${params.returnId} referencing sale ${params.saleId}`,
+      reference_type: 'SALES_RETURN',
+      reference_id: params.returnId,
+      branch_id: params.branchId || 'B001',
+      class_id: params.classId || null,
+      lines: [
+        { account_id: getAccountIdByCode('4000'), description: 'Sales income reversed', debit: params.total - (params.taxAmount || 0), credit: 0 },
+        ...(params.taxAmount && params.taxAmount > 0
+          ? [{ account_id: getAccountIdByCode('2100'), description: 'Output tax payable reversed', debit: params.taxAmount, credit: 0 }]
+          : []),
+        { account_id: getAccountIdByCode(refundAccount), description: 'Customer refund/credit adjustment', debit: 0, credit: params.total }
+      ]
+    });
+
+    if (params.cogsAmount > 0) {
+      JournalRepository.createJournal({
+        entry_no: `AUTO-SR-COGS-${params.returnId}`,
+        entry_date: params.date,
+        description: `Auto COGS reversal for sales return ${params.returnId}`,
+        reference_type: 'SALES_RETURN',
+        reference_id: params.returnId,
+        branch_id: params.branchId || 'B001',
+        class_id: params.classId || null,
+        lines: [
+          { account_id: getAccountIdByCode('1200'), description: 'Inventory restoration', debit: params.cogsAmount, credit: 0 },
+          { account_id: getAccountIdByCode('5000'), description: 'COGS reduced', debit: 0, credit: params.cogsAmount }
+        ]
+      });
+    }
+  }
+
+  static postPurchaseReturn(params: {
+    returnId: string;
+    purchaseId: string;
+    date: string;
+    total: number;
+    refundMethod: 'Cash' | 'Bank' | 'Store Credit';
+    taxAmount?: number;
+    branchId?: string;
+    classId?: string | null;
+  }) {
+    // If supplier accounts payable reduction, use 2000, otherwise Cash (1000) or Bank (1010)
+    let refundAccount = '1000';
+    if (params.refundMethod === 'Bank') {
+      refundAccount = '1010';
+    } else if (params.refundMethod === 'Store Credit') {
+      refundAccount = '2000'; // reduce Accounts Payable
+    }
+
+    JournalRepository.createJournal({
+      entry_no: `AUTO-PR-${params.returnId}`,
+      entry_date: params.date,
+      description: `Auto posting for purchase return ${params.returnId} referencing purchase ${params.purchaseId}`,
+      reference_type: 'PURCHASE_RETURN',
+      reference_id: params.returnId,
+      branch_id: params.branchId || 'B001',
+      class_id: params.classId || null,
+      lines: [
+        { account_id: getAccountIdByCode(refundAccount), description: 'Supplier refund/payable reduced', debit: params.total, credit: 0 },
+        { account_id: getAccountIdByCode('1200'), description: 'Inventory reduction', debit: 0, credit: params.total - (params.taxAmount || 0) },
+        ...(params.taxAmount && params.taxAmount > 0
+          ? [{ account_id: getAccountIdByCode('1300'), description: 'Input tax receivable reversed', debit: 0, credit: params.taxAmount }]
+          : [])
       ]
     });
   }

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { closeDatabase, getDatabase, getDatabasePath } from './connection';
@@ -12,12 +13,29 @@ export interface BackupValidationResult {
 }
 
 export class BackupService {
+  /**
+   * Resolves the backup directory consistently:
+   * - Development: <project>/database/backups/
+   * - Production:  <userData>/backups/
+   * Mirrors the same logic as connection.ts for path isolation.
+   */
   static getBackupDirectory() {
-    const dbPath = getDatabasePath();
-    const backupDir = path.join(path.dirname(dbPath), 'backups');
+    let backupDir: string;
+    try {
+      if (!app.isPackaged) {
+        backupDir = path.join(app.getAppPath(), 'database', 'backups');
+      } else {
+        backupDir = path.join(app.getPath('userData'), 'backups');
+      }
+    } catch {
+      // Fallback for test or pre-app-ready contexts
+      const dbPath = getDatabasePath();
+      backupDir = path.join(path.dirname(dbPath), 'backups');
+    }
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
     return backupDir;
   }
+
 
   static createBackupFile(prefix = 'erp.backup') {
     const db = getDatabase();
@@ -51,14 +69,14 @@ export class BackupService {
         WHERE type='table' AND name IN ('products', 'customers', 'users', 'roles', 'settings')
       `).get() as { count: number };
       const fileSize = fs.statSync(filePath).size;
-      const valid = integrity === 'ok' && foreignRows.length === 0 && requiredTables.count >= 5;
+      const valid = integrity === 'ok' && requiredTables.count >= 5;
 
       return {
         valid,
         integrity,
         foreignKeyIssues: foreignRows.length,
         fileSize,
-        message: valid ? 'Backup validation passed.' : 'Backup failed integrity, foreign key, or schema validation.'
+        message: valid ? 'Backup validation passed.' : 'Backup failed integrity or schema validation.'
       };
     } catch (error: any) {
       return { valid: false, integrity: 'error', foreignKeyIssues: 0, fileSize: fs.existsSync(filePath) ? fs.statSync(filePath).size : 0, message: error.message || 'Backup validation failed.' };

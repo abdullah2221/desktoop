@@ -3,26 +3,51 @@ import * as path from 'path';
 import { getDatabase } from '../connection';
 import { BackupService } from '../BackupService';
 import { AuditLogRepository } from './AuditLogRepository';
+import { NotificationRepository } from './NotificationRepository';
 
 export class BackupRepository {
   static create(type: 'manual' | 'auto' | 'pre-restore' = 'manual', actorId?: string) {
-    const db = getDatabase();
-    const filePath = BackupService.createBackupFile(type === 'manual' ? 'erp.backup' : `erp.${type}`);
-    const validation = BackupService.validateBackup(filePath);
-    const stat = fs.statSync(filePath);
-    const id = `BKP-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    try {
+      const db = getDatabase();
+      const filePath = BackupService.createBackupFile(type === 'manual' ? 'erp.backup' : `erp.${type}`);
+      const validation = BackupService.validateBackup(filePath);
+      const stat = fs.statSync(filePath);
+      const id = `BKP-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-    db.prepare(`
-      INSERT INTO backup_history (
-        id, file_path, file_name, backup_type, status, file_size, integrity_status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, filePath, path.basename(filePath), type, validation.valid ? 'success' : 'failed', stat.size, validation.integrity, validation.message);
+      db.prepare(`
+        INSERT INTO backup_history (
+          id, file_path, file_name, backup_type, status, file_size, integrity_status, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, filePath, path.basename(filePath), type, validation.valid ? 'success' : 'failed', stat.size, validation.integrity, validation.message);
 
-    this.updateSetting('last_backup_path', filePath);
-    this.updateSetting('last_backup_at', new Date().toISOString());
-    this.enforceRetention();
-    AuditLogRepository.write({ action: 'BACKUP_CREATE', user_id: actorId, details: `Backup created: ${filePath}` });
-    return { success: validation.valid, id, file_path: filePath, validation };
+      this.updateSetting('last_backup_path', filePath);
+      this.updateSetting('last_backup_at', new Date().toISOString());
+      this.enforceRetention();
+      AuditLogRepository.write({ action: 'BACKUP_CREATE', user_id: actorId, details: `Backup created: ${filePath}` });
+      if (!validation.valid) {
+        NotificationRepository.createOrRefresh({
+          type: 'system.backup_failed',
+          category: 'system',
+          severity: 'critical',
+          title: 'Backup validation failed',
+          message: validation.message || 'Backup validation failed after backup creation.',
+          rule_key: 'backup_monitor',
+          dedupe_key: `backup_validation_failed:${id}`
+        });
+      }
+      return { success: validation.valid, id, file_path: filePath, validation };
+    } catch (error: any) {
+      NotificationRepository.createOrRefresh({
+        type: 'system.backup_failed',
+        category: 'system',
+        severity: 'critical',
+        title: 'Backup process failed',
+        message: error?.message || String(error),
+        rule_key: 'backup_monitor',
+        dedupe_key: `backup_exception:${new Date().toISOString().split('T')[0]}`
+      });
+      throw error;
+    }
   }
 
   static list() {

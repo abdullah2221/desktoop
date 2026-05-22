@@ -5,6 +5,7 @@ import { Button } from '../../shared/ui/Button';
 import { Badge } from '../../shared/ui/Badge';
 import { Card } from '../../shared/ui/Card';
 import { Input } from '../../shared/ui/Input';
+import { SalesReceiptDetail } from './SalesReceiptDetail';
 
 const defaultLine = (): QuoteItem => ({ product_id: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: 0, line_total: 0 });
 
@@ -15,18 +16,25 @@ function lineTotal(quantity: number, unitPrice: number, discount: number, taxRat
 }
 
 export const SalesPage: React.FC = () => {
-  const { products, customers, notify, reloadProducts } = useErp();
-  const [tab, setTab] = useState<'quotes' | 'invoices' | 'payments'>('quotes');
+  const { products, customers, notify, reloadProducts, setActiveTab, hasPermission, activeUser, activeBranchId } = useErp();
+  const [tab, setTab] = useState<'pos_receipts' | 'invoices' | 'quotes' | 'payments' | 'returns'>('pos_receipts');
 
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<InvoicePayment[]>([]);
+  const [posSales, setPosSales] = useState<any[]>([]);
+  const [salesReturns, setSalesReturns] = useState<any[]>([]);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [customerFilter, setCustomerFilter] = useState('All');
+  const [cashierFilter, setCashierFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [shiftFilter, setShiftFilter] = useState('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [selectedReceiptNo, setSelectedReceiptNo] = useState<string | null>(null);
 
   const [drawerQuote, setDrawerQuote] = useState<Quote | null>(null);
   const [drawerInvoice, setDrawerInvoice] = useState<Invoice | null>(null);
@@ -76,6 +84,8 @@ export const SalesPage: React.FC = () => {
 
   const loadQuotes = async () => setQuotes(await window.api.quotes.getAll());
   const loadInvoices = async () => setInvoices(await window.api.invoices.getAll());
+  const loadPosSales = async () => setPosSales(await window.api.sales.getHistory({ limit: 500 }));
+  const loadSalesReturns = async () => setSalesReturns(await window.api.returns.getSalesHistory());
 
   const loadPayments = async () => {
     if (!paymentForm.invoice_id) {
@@ -88,6 +98,8 @@ export const SalesPage: React.FC = () => {
   useEffect(() => {
     loadQuotes();
     loadInvoices();
+    loadPosSales();
+    loadSalesReturns();
   }, []);
 
   useEffect(() => {
@@ -127,10 +139,12 @@ export const SalesPage: React.FC = () => {
       if (customerFilter !== 'All' && i.customer_name !== customerFilter) return false;
       if (dateFrom && i.invoice_date < dateFrom) return false;
       if (dateTo && i.invoice_date > dateTo) return false;
+      if (cashierFilter && !String((i as any).cashier_name || '').toLowerCase().includes(cashierFilter.toLowerCase())) return false;
+      if (branchFilter && !String((i as any).branch_id || '').toLowerCase().includes(branchFilter.toLowerCase()) && !String((i as any).branch_name || '').toLowerCase().includes(branchFilter.toLowerCase())) return false;
       if (search && !(i.invoice_no.toLowerCase().includes(search.toLowerCase()) || i.customer_name.toLowerCase().includes(search.toLowerCase()))) return false;
       return true;
     });
-  }, [invoices, search, statusFilter, customerFilter, dateFrom, dateTo]);
+  }, [invoices, search, statusFilter, customerFilter, dateFrom, dateTo, cashierFilter, branchFilter]);
 
   const saveQuote = async () => {
     setQuoteValidation('');
@@ -235,26 +249,31 @@ export const SalesPage: React.FC = () => {
 
   const statusBadge = (status: string) => {
     if (status === 'Paid' || status === 'Accepted') return 'success';
-    if (status === 'Rejected' || status === 'Void') return 'danger';
+    if (status === 'Rejected' || status === 'Void' || status === 'VOIDED') return 'danger';
     return 'warning';
   };
 
   return (
     <div className="space-y-4">
       <div className="flex gap-2 border-b border-slate-200 pb-2">
-        {(['quotes', 'invoices', 'payments'] as const).map((t) => (
+        {(['pos_receipts', 'invoices', 'quotes', 'payments', 'returns'] as const).map((t) => (
           <button key={t} id={`sales-tab-${t}`} className={`px-4 py-2 text-sm font-semibold rounded-[4px] ${tab === t ? 'bg-primary-blue text-white' : 'bg-slate-100 text-slate-700'}`} onClick={() => setTab(t)}>
-            {t[0].toUpperCase() + t.slice(1)}
+            {t === 'pos_receipts' ? 'POS Receipts' : t === 'invoices' ? 'Sales Invoices' : t[0].toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
 
       <Card title="Sales Filters">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-9 gap-3">
           <Input id="sales-search" placeholder="Search customer / number" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select id="sales-status-filter" className="erp-input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option>All</option>
-            {(tab === 'quotes' ? ['Draft', 'Sent', 'Accepted', 'Rejected', 'Expired'] : ['Draft', 'Unpaid', 'Partially Paid', 'Paid', 'Void']).map((s) => <option key={s}>{s}</option>)}
+            {(tab === 'quotes'
+              ? ['Draft', 'Sent', 'Accepted', 'Rejected', 'Expired']
+              : tab === 'pos_receipts'
+                ? ['Paid', 'Credit', 'VOIDED', 'RETURNED', 'PARTIALLY_RETURNED']
+                : ['Draft', 'Unpaid', 'Partially Paid', 'Paid', 'Void']
+            ).map((s) => <option key={s}>{s}</option>)}
           </select>
           <select id="sales-customer-filter" className="erp-input" value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)}>
             <option>All</option>
@@ -262,8 +281,75 @@ export const SalesPage: React.FC = () => {
           </select>
           <Input id="sales-date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <Input id="sales-date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input id="sales-cashier-filter" placeholder="Cashier" value={cashierFilter} onChange={(e) => setCashierFilter(e.target.value)} />
+          <Input id="sales-branch-filter" placeholder="Branch" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} />
+          <Input id="sales-shift-filter" placeholder="Shift" value={shiftFilter} onChange={(e) => setShiftFilter(e.target.value)} />
+          <select id="sales-payment-method-filter" className="erp-input" value={paymentMethodFilter} onChange={(e) => setPaymentMethodFilter(e.target.value)}>
+            <option>All</option><option>Cash</option><option>Credit</option><option>Bank</option>
+          </select>
         </div>
       </Card>
+
+      {tab === 'pos_receipts' && (
+        <Card title="POS Receipts">
+          {posSales.length === 0 ? <p className="text-xs text-slate-500 py-6 text-center">No POS sales found for current filters.</p> : (
+            <table className="erp-table">
+              <thead><tr><th>Receipt #</th><th>Date/Time</th><th>Customer</th><th>Cashier</th><th>Branch</th><th>Register</th><th>Shift</th><th>Payment</th><th>Subtotal</th><th>Discount</th><th>Tax</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {posSales.filter((s: any) => {
+                  const canViewAll = hasPermission('sales.view.all');
+                  const canViewBranch = hasPermission('sales.view.branch');
+                  const canViewOwn = hasPermission('sales.view.own') || hasPermission('pos.sale.create');
+                  if (!canViewAll) {
+                    if (canViewBranch && activeBranchId && s.branch_id !== activeBranchId) return false;
+                    if (canViewOwn && !canViewBranch && activeUser?.id && s.cashier_id !== activeUser.id) return false;
+                  }
+                  if (customerFilter !== 'All' && s.customerName !== customerFilter) return false;
+                  if (statusFilter !== 'All' && s.status !== statusFilter) return false;
+                  if (dateFrom && s.date < dateFrom) return false;
+                  if (dateTo && s.date > dateTo) return false;
+                  if (cashierFilter && !String(s.cashier_name || s.cashier_id || '').toLowerCase().includes(cashierFilter.toLowerCase())) return false;
+                  if (branchFilter && !String(s.branch_name || s.branch_id || '').toLowerCase().includes(branchFilter.toLowerCase())) return false;
+                  if (shiftFilter && !String(s.shift_id || '').toLowerCase().includes(shiftFilter.toLowerCase())) return false;
+                  if (paymentMethodFilter !== 'All' && String(s.payment_method || (s.status === 'Credit' ? 'Credit' : 'Cash')) !== paymentMethodFilter) return false;
+                  if (search && !(`${s.invoiceNo} ${s.customerName}`.toLowerCase().includes(search.toLowerCase()))) return false;
+                  return true;
+                }).map((row: any) => (
+                  <tr key={row.invoiceNo}>
+                    <td>{row.invoiceNo}</td>
+                    <td>{row.sale_time ? new Date(row.sale_time).toLocaleString() : row.date}</td>
+                    <td>{row.customerName || 'Walk-in Customer'}</td>
+                    <td>{row.cashier_name || '-'}</td>
+                    <td>{row.branch_name || row.branch_id || '-'}</td>
+                    <td>{row.register_id || '-'}</td>
+                    <td>{row.shift_id || '-'}</td>
+                    <td>{row.payment_method || (row.status === 'Credit' ? 'Credit' : 'Cash')}</td>
+                    <td>Rs. {Number(row.subtotal || row.total || 0).toLocaleString()}</td>
+                    <td>Rs. {Number(row.discount_amount ?? row.discount ?? 0).toLocaleString()}</td>
+                    <td>Rs. {Number(row.tax_amount || 0).toLocaleString()}</td>
+                    <td>Rs. {Number(row.total || 0).toLocaleString()}</td>
+                    <td><Badge variant={statusBadge(row.status) as any}>{row.status}</Badge></td>
+                    <td className="flex gap-1">
+                      <Button size="sm" variant="secondary" onClick={() => setSelectedReceiptNo(row.invoiceNo)}>View</Button>
+                      {hasPermission('sales.receipt.reprint') && <Button size="sm" onClick={async () => {
+                        const payload = await window.api.receipts.fromSale(row.invoiceNo);
+                        await window.api.receipts.print(payload, false);
+                      }}>Reprint</Button>}
+                      {hasPermission('sales.return') && <Button size="sm" variant="danger" onClick={() => setActiveTab('sales_returns')}>Return</Button>}
+                      {hasPermission('sales.void') && row.status !== 'VOIDED' && <Button size="sm" variant="danger" onClick={async () => {
+                        await window.api.sales.void(row.invoiceNo, 'Voided from Sales page');
+                        notify('success', `Sale ${row.invoiceNo} voided.`);
+                        await loadPosSales();
+                        await reloadProducts();
+                      }}>Void</Button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
 
       {tab === 'quotes' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -331,11 +417,13 @@ export const SalesPage: React.FC = () => {
           <Card className="lg:col-span-2" title="Invoices">
             {filteredInvoices.length === 0 ? <p className="text-xs text-slate-500 py-6 text-center">No invoices found for current filters.</p> : (
               <table className="erp-table">
-                <thead><tr><th>No</th><th>Customer</th><th>Date</th><th>Status</th><th>Total</th><th>Due</th><th>Actions</th></tr></thead>
+                <thead><tr><th>No</th><th>Customer</th><th>Date</th><th>Cashier</th><th>Branch</th><th>Status</th><th>Total</th><th>Due</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredInvoices.map((inv) => (
                     <tr key={inv.id} onClick={() => setDrawerInvoice(inv)} className="cursor-pointer">
                       <td>{inv.invoice_no}</td><td>{inv.customer_name}</td><td>{inv.invoice_date}</td>
+                      <td>{(inv as any).cashier_name || '-'}</td>
+                      <td>{(inv as any).branch_name || inv.branch_id || '-'}</td>
                       <td><Badge variant={statusBadge(inv.status) as any}>{inv.status}</Badge></td>
                       <td>Rs. {inv.grand_total.toLocaleString()}</td><td>Rs. {inv.balance_due.toLocaleString()}</td>
                       <td className="flex gap-1">
@@ -415,6 +503,28 @@ export const SalesPage: React.FC = () => {
         </div>
       )}
 
+      {tab === 'returns' && (
+        <Card title="Sales Returns">
+          {salesReturns.length === 0 ? <p className="text-xs text-slate-500 py-6 text-center">No sales returns found.</p> : (
+            <table className="erp-table">
+              <thead><tr><th>Return #</th><th>Sale #</th><th>Customer</th><th>Refund</th><th>Total</th><th>Date</th></tr></thead>
+              <tbody>
+                {salesReturns.map((ret: any) => (
+                  <tr key={ret.id}>
+                    <td>{ret.id}</td>
+                    <td>{ret.sale_id}</td>
+                    <td>{ret.customer_name || 'Walk-in Customer'}</td>
+                    <td>{ret.refund_method}</td>
+                    <td>Rs. {Number(ret.total_amount || 0).toLocaleString()}</td>
+                    <td>{ret.created_at || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
       {(drawerQuote || drawerInvoice) && (
         <div className="fixed inset-0 bg-black/30 z-50 flex justify-end" onClick={() => { setDrawerQuote(null); setDrawerInvoice(null); }}>
           <div className="w-[420px] bg-white h-full shadow-xl p-4 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -426,6 +536,28 @@ export const SalesPage: React.FC = () => {
             {drawerInvoice && <div className="space-y-2 text-sm"><p><b>No:</b> {drawerInvoice.invoice_no}</p><p><b>Customer:</b> {drawerInvoice.customer_name}</p><p><b>Status:</b> {drawerInvoice.status}</p><p><b>Total:</b> Rs. {drawerInvoice.grand_total.toLocaleString()}</p><p><b>Balance:</b> Rs. {drawerInvoice.balance_due.toLocaleString()}</p></div>}
           </div>
         </div>
+      )}
+
+      {selectedReceiptNo && (
+        <SalesReceiptDetail
+          invoiceNo={selectedReceiptNo}
+          canReprint={hasPermission('sales.receipt.reprint')}
+          canVoid={hasPermission('sales.void')}
+          canReturn={hasPermission('sales.return')}
+          notify={notify}
+          onOpenReturn={() => {
+            setSelectedReceiptNo(null);
+            setActiveTab('sales_returns');
+          }}
+          onVoid={async (invoiceNo) => {
+            await window.api.sales.void(invoiceNo, 'Voided from receipt detail');
+            notify('success', `Sale ${invoiceNo} voided.`);
+            await loadPosSales();
+            await reloadProducts();
+            setSelectedReceiptNo(null);
+          }}
+          onClose={() => setSelectedReceiptNo(null)}
+        />
       )}
     </div>
   );

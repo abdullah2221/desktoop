@@ -4,15 +4,24 @@
   "description": "Offline-first POS and Inventory ERP desktop application for retail stores in Pakistan.",
   "main": "dist/main/main.js",
   "scripts": {
-    "dev:renderer": "vite",
+    "dev:renderer": "vite --port 5173 --strictPort false",
     "dev:main": "tsc -p tsconfig.main.json -w",
-    "dev:electron": "npm run build:main && cp database/bin/better_sqlite3_electron.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && wait-on http://localhost:5173 && electron .",
-    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\" \"npm run dev:electron\"",
+    "dev:electron": "npm run prepare:electron-runtime && npm run build:main && electron .",
+    "dev": "node scripts/dev-launch.cjs",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
-    "build": "cp database/bin/better_sqlite3_electron.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && npm run build:renderer && npm run build:main",
+    "build": "npm run prepare:electron-runtime && npm run build:renderer && npm run build:main",
+    "dist": "npm run build && electron-builder",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux",
     "package": "npm run build && electron-builder",
-    "test": "cp database/bin/better_sqlite3_node.node node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3/build/Release/better_sqlite3.node && vitest run",
+    "rebuild:electron-sqlite": "npx electron-builder install-app-deps && node scripts/sqlite-runtime.cjs cache-electron",
+    "rebuild:node-sqlite": "npm rebuild better-sqlite3 && node scripts/sqlite-runtime.cjs cache-node",
+    "prepare:electron-runtime": "node scripts/sqlite-runtime.cjs prepare-electron",
+    "prepare:test-runtime": "node scripts/sqlite-runtime.cjs prepare-node",
+    "clean": "rm -rf dist dist-releases",
+    "test": "npm run prepare:test-runtime && vitest run",
     "test:e2e": "playwright test"
   },
   "keywords": [
@@ -26,6 +35,74 @@
   ],
   "author": "Antigravity Pair Program",
   "license": "MIT",
+  "build": {
+    "appId": "com.erppakistan.pos",
+    "productName": "Enterprise ERP",
+    "copyright": "Copyright © 2025 Enterprise ERP Ltd.",
+    "directories": {
+      "output": "dist-releases"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/better-sqlite3/build/Release/better_sqlite3.node",
+      "database/bin/**"
+    ],
+    "extraResources": [
+      {
+        "from": "database/bin/better_sqlite3_electron.node",
+        "to": "better_sqlite3_electron.node"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        }
+      ],
+      "publisherName": "Enterprise ERP Ltd.",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Enterprise ERP",
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "category": "Office",
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "title": "Enterprise ERP ${version}",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    }
+  },
   "dependencies": {
     "@tanstack/react-table": "^8.15.0",
     "better-sqlite3": "^11.10.0",
@@ -35,6 +112,7 @@
     "react-hook-form": "^7.51.2",
     "react-router-dom": "^6.22.3",
     "recharts": "^2.12.3",
+    "xlsx": "^0.18.5",
     "zod": "^3.22.4"
   },
   "devDependencies": {

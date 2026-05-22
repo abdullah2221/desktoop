@@ -21,4 +21,9 @@ export function registerReportHandlers() {
   ipcMain.handle('reports:salesByCustomerProduct', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.salesByCustomerProduct({ dateFrom, dateTo }); });
   ipcMain.handle('reports:purchasesBySupplierProduct', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.purchasesBySupplierProduct({ dateFrom, dateTo }); });
   ipcMain.handle('reports:expenseSummary', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.expenseSummary({ dateFrom, dateTo }); });
+  ipcMain.handle('reports:budgetVsActual', (_, token: string, dateFrom: string, dateTo: string, budgetId?: string, branchId?: string, classId?: string) => { requireBranch(token, branchId); return ReportRepository.budgetVsActual({ dateFrom, dateTo, budgetId, branchId, classId }); });
+  ipcMain.handle('reports:classProfitAndLoss', (_, token: string, dateFrom: string, dateTo: string, branchId?: string, classId?: string) => { requireBranch(token, branchId); return ReportRepository.classProfitAndLoss({ dateFrom, dateTo, branchId, classId }); });
+  ipcMain.handle('reports:customerBalance', (_, token: string) => { requireReports(token); return ReportRepository.customerBalanceReport(); });
+  ipcMain.handle('reports:customerAging', (_, token: string, asOfDate: string) => { requireReports(token); return ReportRepository.customerAgingReport(asOfDate); });
+  ipcMain.handle('reports:paymentCollection', (_, token: string, dateFrom: string, dateTo: string) => { requireReports(token); return ReportRepository.paymentCollectionReport(dateFrom, dateTo); });
 }

@@ -161,7 +161,13 @@ export const AccountingPage: React.FC = () => {
     }
 
     try {
-      await window.api.journals.create({ ...journalForm, total_debit: totals.totalDebit, total_credit: totals.totalCredit });
+      const lines = journalForm.lines.map((line) => ({
+        account_id: line.account_id || '',
+        description: line.description || '',
+        debit: Number(line.debit) || 0,
+        credit: Number(line.credit) || 0
+      }));
+      await window.api.journals.create({ ...journalForm, lines, total_debit: totals.totalDebit, total_credit: totals.totalCredit });
       setIsJournalModalOpen(false);
       setJournalForm({ entry_date: new Date().toISOString().split('T')[0], description: '', reference_id: '', lines: [emptyJournalLine(), emptyJournalLine()] });
       await loadJournals();
