@@ -109,7 +109,7 @@ export class ReceiptService {
         <div>
           <div><strong>Invoice #:</strong> ${sale.invoiceNo}</div>
           <div><strong>Date/Time:</strong> ${sale.sale_time ? new Date(sale.sale_time).toLocaleString() : (sale.date || new Date().toLocaleString())}</div>
-          <div><strong>Cashier:</strong> ${sale.cashierName || 'Cashier'}</div>
+          <div><strong>Cashier:</strong> ${sale.cashier_name || sale.cashierName || 'Cashier'}</div>
           <div><strong>Branch:</strong> ${sale.branch_name || sale.branch_id || 'Main Branch'}</div>
           <div><strong>Register:</strong> ${sale.register_id || 'REG-1'}</div>
           <div><strong>Shift:</strong> ${sale.shift_id || '-'}</div>

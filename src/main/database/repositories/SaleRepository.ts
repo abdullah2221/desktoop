@@ -275,12 +275,22 @@ export class SaleRepository {
 
       if (sale.customer_type === 'REGISTERED' && sale.customerName) {
         const creditChange = sale.status === 'Credit' ? -Number(sale.total || 0) : 0;
-        CustomerRepository.createOrIncrementCredit(
-          sale.customerName,
-          creditChange,
-          -Number(sale.total || 0),
-          new Date().toISOString().split('T')[0]
-        );
+        const customer = CustomerRepository.getByName(sale.customerName) as any;
+        if (customer) {
+          db.prepare(`
+            UPDATE customers
+            SET credit = credit + @credit_change,
+                totalPurchases = totalPurchases + @purchases_change,
+                lastPayment = @payment_date,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE name = @name
+          `).run({
+            credit_change: creditChange,
+            purchases_change: -Number(sale.total || 0),
+            payment_date: new Date().toISOString().split('T')[0],
+            name: sale.customerName
+          });
+        }
       }
 
       if (sale.shift_id && sale.status === 'Paid' && (sale.payment_method || 'Cash') === 'Cash') {

@@ -39,10 +39,23 @@ export function registerInventoryHandlers() {
     requireBranch(token, branchId);
     return BranchInventoryRepository.valuation(branchId);
   });
+  ipcMain.handle('branchInventory:getByProduct', (_, token: string, productId: string) => {
+    requireAny(token, ['inventory.view.branch', 'inventory.transfer', 'inventory.adjust']);
+    return BranchInventoryRepository.getByProduct(productId);
+  });
+  ipcMain.handle('branchInventory:getStockCard', (_, token: string, productId: string, branchId?: string) => {
+    requireAny(token, ['inventory.view.branch', 'inventory.transfer', 'inventory.adjust']);
+    requireBranch(token, branchId);
+    return BranchInventoryRepository.getStockCard(productId, branchId);
+  });
 
   ipcMain.handle('stockTransfers:getAll', (_, token: string) => {
     requireAny(token, ['inventory.transfer', 'inventory.view.branch']);
     return StockTransferRepository.getAll();
+  });
+  ipcMain.handle('stockTransfers:getById', (_, token: string, id: string) => {
+    requireAny(token, ['inventory.transfer', 'inventory.view.branch']);
+    return StockTransferRepository.getById(id);
   });
   ipcMain.handle('stockTransfers:create', (_, token: string, payload: any) => {
     AuthRepository.requirePermission(token, 'inventory.transfer');
@@ -57,6 +70,10 @@ export function registerInventoryHandlers() {
   ipcMain.handle('stockTransfers:complete', (_, token: string, id: string) => {
     AuthRepository.requirePermission(token, 'inventory.transfer');
     return StockTransferRepository.complete(id, actorId(token));
+  });
+  ipcMain.handle('stockTransfers:markInTransit', (_, token: string, id: string) => {
+    AuthRepository.requirePermission(token, 'inventory.transfer');
+    return StockTransferRepository.markInTransit(id, actorId(token));
   });
   ipcMain.handle('stockTransfers:reject', (_, token: string, id: string) => {
     AuthRepository.requirePermission(token, 'inventory.transfer');
@@ -75,5 +92,9 @@ export function registerInventoryHandlers() {
   ipcMain.handle('inventoryAdjustments:accountingFoundation', (_, token: string, adjustmentId: string) => {
     AuthRepository.requirePermission(token, 'inventory.adjust');
     return InventoryAdjustmentRepository.accountingFoundation(adjustmentId);
+  });
+  ipcMain.handle('inventoryAdjustments:getById', (_, token: string, adjustmentId: string) => {
+    requireAny(token, ['inventory.adjust', 'inventory.view.branch']);
+    return InventoryAdjustmentRepository.getById(adjustmentId);
   });
 }

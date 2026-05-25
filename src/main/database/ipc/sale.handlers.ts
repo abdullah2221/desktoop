@@ -30,6 +30,22 @@ export function registerSaleHandlers() {
     throw new Error('Unauthorized');
   };
 
+  const getScopedSaleByInvoiceNo = (token: string, invoiceNo: string) => {
+    const user = AuthRepository.getCurrentUser(token);
+    if (!user) throw new Error('Unauthorized');
+    const row = SaleRepository.getById(invoiceNo) as any;
+    if (!row) return null;
+    if (AuthRepository.hasPermission(token, 'sales.view.all')) return row;
+    if (AuthRepository.hasPermission(token, 'sales.view.branch')) {
+      AuthRepository.requireBranchAccess(token, row.branch_id || user.branch_id || '');
+      return row;
+    }
+    if ((AuthRepository.hasPermission(token, 'sales.view.own') || AuthRepository.hasPermission(token, 'pos.sale.create')) && row.cashier_id === user.id) {
+      return row;
+    }
+    throw new Error('Unauthorized');
+  };
+
   ipcMain.handle('sales:getAll', (_, token: string) => {
     if (!canViewSales(token)) throw new Error('Unauthorized');
     return scopedSales(token, { limit: 500 });
@@ -42,27 +58,19 @@ export function registerSaleHandlers() {
 
   ipcMain.handle('sales:getById', (_, token: string, invoiceNo: string) => {
     if (!canViewSales(token)) throw new Error('Unauthorized');
-    const row = SaleRepository.getById(invoiceNo) as any;
-    if (!row) return null;
-    const user = AuthRepository.getCurrentUser(token);
-    if (!user) throw new Error('Unauthorized');
-    if (AuthRepository.hasPermission(token, 'sales.view.all')) return row;
-    if (AuthRepository.hasPermission(token, 'sales.view.branch')) {
-      AuthRepository.requireBranchAccess(token, row.branch_id || user.branch_id || '');
-      return row;
-    }
-    if ((AuthRepository.hasPermission(token, 'sales.view.own') || AuthRepository.hasPermission(token, 'pos.sale.create')) && row.cashier_id === user.id) return row;
-    throw new Error('Unauthorized');
+    return getScopedSaleByInvoiceNo(token, invoiceNo);
   });
 
   ipcMain.handle('sales:getItems', (_, token: string, invoiceNo: string) => {
     if (!canViewSales(token)) throw new Error('Unauthorized');
+    const row = getScopedSaleByInvoiceNo(token, invoiceNo);
+    if (!row) return [];
     return SaleRepository.getItems(invoiceNo);
   });
 
   ipcMain.handle('sales:getByCustomer', (_, token: string, customerIdOrName: string) => {
     if (!canViewSales(token)) throw new Error('Unauthorized');
-    return SaleRepository.getByCustomer(customerIdOrName);
+    return scopedSales(token, { customer: customerIdOrName, limit: 1000 });
   });
 
   ipcMain.handle('sales:getByShift', (_, token: string, shiftId: string) => {
@@ -83,6 +91,8 @@ export function registerSaleHandlers() {
 
   ipcMain.handle('sales:getReceiptDetail', (_, token: string, invoiceNo: string) => {
     if (!canViewSales(token)) throw new Error('Unauthorized');
+    const row = getScopedSaleByInvoiceNo(token, invoiceNo);
+    if (!row) return null;
     return SaleRepository.getReceiptDetail(invoiceNo);
   });
 

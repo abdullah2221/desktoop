@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Button } from '../../shared/ui/Button';
 import { Badge } from '../../shared/ui/Badge';
 import { IconActionButton } from '../../shared/ui/IconActionButton';
-import { CircleOff, Copy, Printer, RotateCcw } from 'lucide-react';
+import { CircleOff, Copy, History, Printer, RotateCcw } from 'lucide-react';
 
 interface Props {
   invoiceNo: string;
@@ -96,6 +96,7 @@ export const SalesReceiptDetail: React.FC<Props> = ({ invoiceNo, canReprint, can
               <p><b>Status:</b> <Badge variant={detail.sale.status === 'VOIDED' ? 'danger' : 'success'}>{detail.sale.status}</Badge></p>
               <p><b>Date/Time:</b> {detail.sale.sale_time ? new Date(detail.sale.sale_time).toLocaleString() : detail.sale.date}</p>
               <p><b>Customer:</b> {detail.sale.customerName || 'Walk-in Customer'}</p>
+              <p><b>Customer Type:</b> {detail.sale.customer_type === 'REGISTERED' ? 'Registered' : 'Walk-in'}</p>
               <p><b>Cashier:</b> {detail.sale.cashier_name || '-'}</p>
               <p><b>Branch:</b> {detail.sale.branch_name || detail.sale.branch_id || '-'}</p>
               <p><b>Register:</b> {detail.sale.register_id || '-'}</p>
@@ -135,20 +136,23 @@ export const SalesReceiptDetail: React.FC<Props> = ({ invoiceNo, canReprint, can
               <p><b>Accounting:</b> {detail.statuses.accounting_posted ? 'Posted' : 'Pending'}</p>
               <p><b>Stock:</b> {detail.statuses.stock_posted ? 'Posted' : 'Pending'}</p>
               <p><b>Returns:</b> {detail.statuses.return_status}</p>
+              <p><b>Void:</b> {detail.sale.status === 'VOIDED' ? 'Voided' : 'Not voided'}</p>
             </div>
 
-            <div>
+            <div id="receipt-audit-trail">
               <p className="font-semibold text-xs mb-1">Audit Trail</p>
               <div className="max-h-28 overflow-y-auto border border-slate-200 rounded p-2 space-y-1">
                 {(detail.audit || []).slice(0, 10).map((row: any) => (
                   <div key={row.id} className="text-[11px]"><b>{row.action}</b> - {row.details}</div>
                 ))}
+                {(!detail.audit || detail.audit.length === 0) && <div className="text-[11px] text-slate-500">No audit records found for this receipt.</div>}
               </div>
             </div>
 
             <div className="flex gap-1 pt-2">
               {canReprint && <IconActionButton icon={<Printer className="w-3.5 h-3.5" />} tooltip="Print receipt" variant="primary" onClick={() => reprint(false)} />}
               {canReprint && <IconActionButton icon={<Copy className="w-3.5 h-3.5" />} tooltip="Print duplicate receipt" onClick={() => reprint(true)} />}
+              <IconActionButton icon={<History className="w-3.5 h-3.5" />} tooltip="View audit trail" onClick={() => document.getElementById('receipt-audit-trail')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
               {canReturn && <IconActionButton icon={<RotateCcw className="w-3.5 h-3.5" />} tooltip="Create return" onClick={onOpenReturn} />}
               {canVoid && detail.sale.status !== 'VOIDED' && (
                 <IconActionButton icon={<CircleOff className="w-3.5 h-3.5" />} tooltip="Void sale" danger onClick={() => onVoid(invoiceNo)} />

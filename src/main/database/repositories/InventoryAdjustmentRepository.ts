@@ -25,9 +25,22 @@ export class InventoryAdjustmentRepository {
     `).all(adjustmentId);
   }
 
+  static getById(adjustmentId: string) {
+    const db = getDatabase();
+    const row = db.prepare(`
+      SELECT ia.*, b.branch_code, COALESCE(b.branch_name, b.name) as branch_name
+      FROM inventory_adjustments ia
+      JOIN branches b ON b.id = ia.branch_id
+      WHERE ia.id=?
+    `).get(adjustmentId) as any;
+    if (!row) return null;
+    return { ...row, items: this.getItems(adjustmentId) };
+  }
+
   static create(payload: any, actorId?: string) {
     const db = getDatabase();
     const id = payload.id || `ADJ-${Date.now()}`;
+    if (!String(payload.reason || '').trim()) throw new Error('Adjustment reason is required.');
     const tx = db.transaction(() => {
       db.prepare(`
         INSERT INTO inventory_adjustments (
@@ -104,7 +117,7 @@ export class InventoryAdjustmentRepository {
       id: `SM-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       branch_id: branchId,
       product_id: productId,
-      movement_type: adjustmentType,
+      movement_type: qty >= 0 ? 'ADJUSTMENT_IN' : (String(adjustmentType || '').toUpperCase().includes('DAMAGE') ? 'DAMAGE' : String(adjustmentType || '').toUpperCase().includes('SHRINKAGE') ? 'SHRINKAGE' : 'ADJUSTMENT_OUT'),
       quantity_in: qty > 0 ? qty : 0,
       quantity_out: qty < 0 ? Math.abs(qty) : 0,
       reference_id: referenceId,

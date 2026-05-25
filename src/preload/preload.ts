@@ -25,15 +25,19 @@ contextBridge.exposeInMainWorld('api', {
   
   // SECURE SQLITE DATABASE APIS
   products: {
-    getAll: () => ipcRenderer.invoke('products:getAll'),
-    getById: (id: string) => ipcRenderer.invoke('products:getById', id),
-    getByBarcode: (barcode: string) => ipcRenderer.invoke('products:getByBarcode', barcode),
-    searchByBarcodeOrSku: (query: string) => ipcRenderer.invoke('products:searchByBarcodeOrSku', query),
-    getLowStock: () => ipcRenderer.invoke('products:getLowStock'),
-    create: (product: Partial<Product>) => ipcRenderer.invoke('products:create', product),
-    update: (product: Partial<Product>) => ipcRenderer.invoke('products:update', product),
-    deactivate: (id: string) => ipcRenderer.invoke('products:deactivate', id),
-    updateStock: (id: string, newStock: number) => ipcRenderer.invoke('products:updateStock', id, newStock),
+    getAll: () => ipcRenderer.invoke('products:getAll', sessionToken),
+    getById: (id: string) => ipcRenderer.invoke('products:getById', sessionToken, id),
+    getByBarcode: (barcode: string) => ipcRenderer.invoke('products:getByBarcode', sessionToken, barcode),
+    searchByBarcodeOrSku: (query: string) => ipcRenderer.invoke('products:searchByBarcodeOrSku', sessionToken, query),
+    getLowStock: () => ipcRenderer.invoke('products:getLowStock', sessionToken),
+    create: (product: Partial<Product>) => ipcRenderer.invoke('products:create', sessionToken, product),
+    update: (product: Partial<Product>) => ipcRenderer.invoke('products:update', sessionToken, product),
+    deactivate: (id: string) => ipcRenderer.invoke('products:deactivate', sessionToken, id),
+    reactivate: (id: string) => ipcRenderer.invoke('products:reactivate', sessionToken, id),
+    updateStock: (id: string, newStock: number) => ipcRenderer.invoke('products:updateStock', sessionToken, id, newStock),
+    getStockMovements: (productId: string, filters?: Record<string, unknown>) => ipcRenderer.invoke('products:getStockMovements', sessionToken, productId, filters || {}),
+    getBranchStock: (productId: string) => ipcRenderer.invoke('products:getBranchStock', sessionToken, productId),
+    getAuditTrail: (productId: string) => ipcRenderer.invoke('products:getAuditTrail', sessionToken, productId),
   },
 
 
@@ -191,7 +195,8 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   stockMovements: {
-    getByProduct: (productId: string) => ipcRenderer.invoke('stockMovements:getByProduct', productId),
+    getByProduct: (productId: string) => ipcRenderer.invoke('stockMovements:getByProduct', sessionToken, productId),
+    getHistory: (filters?: Record<string, unknown>) => ipcRenderer.invoke('stockMovements:getHistory', sessionToken, filters || {}),
   },
 
   supplierPayments: {
@@ -385,21 +390,26 @@ contextBridge.exposeInMainWorld('api', {
 
   branchInventory: {
     getAll: (branchId?: string) => ipcRenderer.invoke('branchInventory:getAll', sessionToken, branchId),
+    getByProduct: (productId: string) => ipcRenderer.invoke('branchInventory:getByProduct', sessionToken, productId),
     upsert: (payload: unknown) => ipcRenderer.invoke('branchInventory:upsert', sessionToken, payload),
     lowStock: (branchId?: string) => ipcRenderer.invoke('branchInventory:lowStock', sessionToken, branchId),
     valuation: (branchId?: string) => ipcRenderer.invoke('branchInventory:valuation', sessionToken, branchId),
+    getStockCard: (productId: string, branchId?: string) => ipcRenderer.invoke('branchInventory:getStockCard', sessionToken, productId, branchId),
   },
 
   stockTransfers: {
     getAll: () => ipcRenderer.invoke('stockTransfers:getAll', sessionToken),
+    getById: (id: string) => ipcRenderer.invoke('stockTransfers:getById', sessionToken, id),
     create: (payload: unknown) => ipcRenderer.invoke('stockTransfers:create', sessionToken, payload),
     approve: (id: string) => ipcRenderer.invoke('stockTransfers:approve', sessionToken, id),
+    markInTransit: (id: string) => ipcRenderer.invoke('stockTransfers:markInTransit', sessionToken, id),
     complete: (id: string) => ipcRenderer.invoke('stockTransfers:complete', sessionToken, id),
     reject: (id: string) => ipcRenderer.invoke('stockTransfers:reject', sessionToken, id),
   },
 
   inventoryAdjustments: {
     getAll: () => ipcRenderer.invoke('inventoryAdjustments:getAll', sessionToken),
+    getById: (adjustmentId: string) => ipcRenderer.invoke('inventoryAdjustments:getById', sessionToken, adjustmentId),
     create: (payload: unknown) => ipcRenderer.invoke('inventoryAdjustments:create', sessionToken, payload),
     accountingFoundation: (adjustmentId: string) => ipcRenderer.invoke('inventoryAdjustments:accountingFoundation', sessionToken, adjustmentId),
   },

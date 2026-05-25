@@ -7,7 +7,7 @@ import { Card } from '../../shared/ui/Card';
 import { Input } from '../../shared/ui/Input';
 import { SalesReceiptDetail } from './SalesReceiptDetail';
 import { IconActionButton } from '../../shared/ui/IconActionButton';
-import { CircleOff, Eye, FileOutput, Pencil, Printer, RotateCcw } from 'lucide-react';
+import { CircleOff, Copy, Eye, FileOutput, History, Pencil, Printer, RotateCcw } from 'lucide-react';
 
 const defaultLine = (): QuoteItem => ({ product_id: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: 0, line_total: 0 });
 
@@ -36,7 +36,11 @@ export const SalesPage: React.FC = () => {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [totalMin, setTotalMin] = useState('');
+  const [totalMax, setTotalMax] = useState('');
   const [selectedReceiptNo, setSelectedReceiptNo] = useState<string | null>(null);
+  const [loadingPosSales, setLoadingPosSales] = useState(false);
+  const [posSalesError, setPosSalesError] = useState('');
 
   const [drawerQuote, setDrawerQuote] = useState<Quote | null>(null);
   const [drawerInvoice, setDrawerInvoice] = useState<Invoice | null>(null);
@@ -86,7 +90,18 @@ export const SalesPage: React.FC = () => {
 
   const loadQuotes = async () => setQuotes(await window.api.quotes.getAll());
   const loadInvoices = async () => setInvoices(await window.api.invoices.getAll());
-  const loadPosSales = async () => setPosSales(await window.api.sales.getHistory({ limit: 500 }));
+  const loadPosSales = async () => {
+    setLoadingPosSales(true);
+    setPosSalesError('');
+    try {
+      setPosSales(await window.api.sales.getHistory({ limit: 500 }));
+    } catch (error: any) {
+      setPosSalesError(String(error?.message || error || 'Failed to load POS receipts.'));
+      setPosSales([]);
+    } finally {
+      setLoadingPosSales(false);
+    }
+  };
   const loadSalesReturns = async () => setSalesReturns(await window.api.returns.getSalesHistory());
 
   const loadPayments = async () => {
@@ -289,12 +304,14 @@ export const SalesPage: React.FC = () => {
           <select id="sales-payment-method-filter" className="erp-input" value={paymentMethodFilter} onChange={(e) => setPaymentMethodFilter(e.target.value)}>
             <option>All</option><option>Cash</option><option>Credit</option><option>Bank</option>
           </select>
+          <Input id="sales-total-min-filter" type="number" min="0" placeholder="Min total" value={totalMin} onChange={(e) => setTotalMin(e.target.value)} />
+          <Input id="sales-total-max-filter" type="number" min="0" placeholder="Max total" value={totalMax} onChange={(e) => setTotalMax(e.target.value)} />
         </div>
       </Card>
 
       {tab === 'pos_receipts' && (
         <Card title="POS Receipts">
-          {posSales.length === 0 ? <p className="text-xs text-slate-500 py-6 text-center">No POS sales found for current filters.</p> : (
+          {loadingPosSales ? <p className="text-xs text-slate-500 py-6 text-center">Loading receipts...</p> : posSalesError ? <p className="text-xs text-red-600 py-6 text-center">{posSalesError}</p> : posSales.length === 0 ? <p className="text-xs text-slate-500 py-6 text-center">No POS sales found for current filters.</p> : (
             <table className="erp-table">
               <thead><tr><th>Receipt #</th><th>Date/Time</th><th>Customer</th><th>Cashier</th><th>Branch</th><th>Register</th><th>Shift</th><th>Payment</th><th>Subtotal</th><th>Discount</th><th>Tax</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
@@ -314,6 +331,8 @@ export const SalesPage: React.FC = () => {
                   if (branchFilter && !String(s.branch_name || s.branch_id || '').toLowerCase().includes(branchFilter.toLowerCase())) return false;
                   if (shiftFilter && !String(s.shift_id || '').toLowerCase().includes(shiftFilter.toLowerCase())) return false;
                   if (paymentMethodFilter !== 'All' && String(s.payment_method || (s.status === 'Credit' ? 'Credit' : 'Cash')) !== paymentMethodFilter) return false;
+                  if (totalMin && Number(s.total || 0) < Number(totalMin)) return false;
+                  if (totalMax && Number(s.total || 0) > Number(totalMax)) return false;
                   if (search && !(`${s.invoiceNo} ${s.customerName}`.toLowerCase().includes(search.toLowerCase()))) return false;
                   return true;
                 }).map((row: any) => (
@@ -338,6 +357,11 @@ export const SalesPage: React.FC = () => {
                         const payload = await window.api.receipts.fromSale(row.invoiceNo);
                         await window.api.receipts.print(payload, false);
                       }} />}
+                      {hasPermission('sales.receipt.reprint') && <IconActionButton icon={<Copy className="w-3.5 h-3.5" />} tooltip="Print duplicate copy" onClick={async () => {
+                        const payload = await window.api.receipts.duplicateFromSale(row.invoiceNo);
+                        await window.api.receipts.print(payload, true);
+                      }} />}
+                      {(hasPermission('sales.view.branch') || hasPermission('sales.view.all') || hasPermission('users.manage')) && <IconActionButton icon={<History className="w-3.5 h-3.5" />} tooltip="View audit trail" onClick={() => setSelectedReceiptNo(row.invoiceNo)} />}
                       {hasPermission('sales.return') && <IconActionButton icon={<RotateCcw className="w-3.5 h-3.5" />} tooltip="Create return" onClick={() => setActiveTab('sales_returns')} />}
                       {hasPermission('sales.void') && <IconActionButton icon={<CircleOff className="w-3.5 h-3.5" />} tooltip="Void sale" danger disabled={row.status === 'VOIDED'} disabledTooltip="Sale is already voided" onClick={async () => {
                         await window.api.sales.void(row.invoiceNo, 'Voided from Sales page');

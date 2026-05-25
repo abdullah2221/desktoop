@@ -57,6 +57,7 @@ interface ErpContextType {
   addProduct: (product: Partial<Product>) => Promise<{ success: boolean; message?: string }>;
   updateProduct: (product: Partial<Product>) => Promise<{ success: boolean; message?: string }>;
   deactivateProduct: (id: string) => Promise<boolean>;
+  reactivateProduct: (id: string) => Promise<boolean>;
   addExpense: (category: string, paidTo: string, amount: number) => boolean;
   receivePayment: (customerName: string, amount: number) => boolean;
   reloadSuppliers: () => Promise<void>;
@@ -459,6 +460,17 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const reactivateProduct = async (id: string) => {
+    try {
+      await window.api.products.reactivate(id);
+      await reloadProducts();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
   // EXPENSE JOURNAL PERSISTENT MUTATOR
   const addExpense = (category: string, paidTo: string, amount: number) => {
     if (!paidTo || amount <= 0 || !window.api) return false;
@@ -651,6 +663,7 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addProduct,
       updateProduct,
       deactivateProduct,
+      reactivateProduct,
       addExpense,
       receivePayment,
       reloadSuppliers,

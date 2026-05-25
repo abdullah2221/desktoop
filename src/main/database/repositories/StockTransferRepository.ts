@@ -27,6 +27,20 @@ export class StockTransferRepository {
     `).all(transferId);
   }
 
+  static getById(id: string) {
+    const db = getDatabase();
+    const row = db.prepare(`
+      SELECT st.*, sb.branch_code as source_branch_code, COALESCE(sb.branch_name, sb.name) as source_branch_name,
+             dbb.branch_code as destination_branch_code, COALESCE(dbb.branch_name, dbb.name) as destination_branch_name
+      FROM stock_transfers st
+      JOIN branches sb ON sb.id = st.source_branch_id
+      JOIN branches dbb ON dbb.id = st.destination_branch_id
+      WHERE st.id=?
+    `).get(id) as any;
+    if (!row) return null;
+    return { ...row, items: this.getItems(row.id) };
+  }
+
   static create(payload: any, actorId?: string) {
     const db = getDatabase();
     const id = payload.id || `TRF-${Date.now()}`;
@@ -84,6 +98,27 @@ export class StockTransferRepository {
         WHERE id=?
       `).run(actorId || null, id);
       AuditLogRepository.write({ action: 'STOCK_TRANSFER_APPROVE', user_id: actorId, details: `Stock transfer ${id} approved` });
+      return true;
+    });
+    return tx();
+  }
+
+  static markInTransit(id: string, actorId?: string) {
+    const db = getDatabase();
+    const tx = db.transaction(() => {
+      const transfer = db.prepare("SELECT * FROM stock_transfers WHERE id=? AND status='Pending'").get(id) as any;
+      if (!transfer) throw new Error('Pending transfer not found.');
+      const items = this.getItems(id) as any[];
+      for (const item of items) {
+        const changed = BranchInventoryRepository.adjustQuantity(transfer.source_branch_id, item.product_id, -Number(item.quantity));
+        this.logMovement(transfer.source_branch_id, item.product_id, 'TRANSFER_OUT', 0, item.quantity, id, changed.previousQuantity, changed.newQuantity, `Transfer dispatched ${transfer.transfer_no}`, actorId);
+      }
+      db.prepare(`
+        UPDATE stock_transfers
+        SET status='In Transit', approval_date=CURRENT_TIMESTAMP, shipment_date=CURRENT_TIMESTAMP, approved_by=?, updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+      `).run(actorId || null, id);
+      AuditLogRepository.write({ action: 'STOCK_TRANSFER_MARK_IN_TRANSIT', user_id: actorId, details: `Stock transfer ${id} marked in transit` });
       return true;
     });
     return tx();

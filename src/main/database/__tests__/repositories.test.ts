@@ -232,6 +232,55 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(settings['test_settings_key']).toBe('test_settings_val');
   });
 
+  it('should block duplicate SKU and duplicate barcode for product create/update', () => {
+    const base = {
+      id: 'TEST-DUP-1',
+      sku: 'TEST-DUP-SKU-1',
+      name: 'Duplicate Base Product',
+      category_id: 'CAT01',
+      category_name: 'Grocery',
+      purchase_cost: 100,
+      sale_price: 150,
+      stock_quantity: 10,
+      minimum_stock: 1,
+      barcode: 'DUP-BC-001',
+      status: 'active'
+    };
+    expect(ProductRepository.create(base).success).toBe(true);
+    expect(() => ProductRepository.create({
+      ...base,
+      id: 'TEST-DUP-2',
+      sku: 'TEST-DUP-SKU-1',
+      barcode: 'DUP-BC-002'
+    })).toThrow('Duplicate SKU is not allowed.');
+    expect(() => ProductRepository.create({
+      ...base,
+      id: 'TEST-DUP-3',
+      sku: 'TEST-DUP-SKU-3',
+      barcode: 'DUP-BC-001'
+    })).toThrow('Duplicate barcode is not allowed.');
+  });
+
+  it('should reactivate deactivated product', () => {
+    const id = 'TEST-REACTIVATE-1';
+    expect(ProductRepository.create({
+      id,
+      sku: id,
+      name: 'Reactivate Product',
+      category_id: 'CAT01',
+      category_name: 'Grocery',
+      purchase_cost: 80,
+      sale_price: 120,
+      stock_quantity: 5,
+      minimum_stock: 1,
+      status: 'active'
+    }).success).toBe(true);
+    expect(ProductRepository.deactivate(id)).toBe(true);
+    expect(ProductRepository.reactivate(id)).toBe(true);
+    const row = ProductRepository.getById(id) as any;
+    expect(row.status).toBe('active');
+  });
+
   it('should increase customer credit lines and log payments correctly', () => {
     const dateStr = new Date().toISOString().split('T')[0];
     const customerName = 'TEST-Arif Jamil';
@@ -1520,9 +1569,82 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(AuthRepository.hasPermission(adminLogin.token, 'inventory.transfer')).toBe(true);
     expect(AuthRepository.hasPermission(adminLogin.token, 'inventory.adjust')).toBe(true);
     expect(AuthRepository.hasPermission(adminLogin.token, 'inventory.view.branch')).toBe(true);
+    expect(AuthRepository.hasPermission(adminLogin.token, 'inventory.product.edit')).toBe(true);
     const cashierLogin = AuthRepository.login('refreshuser', 'refresh123');
     expect(AuthRepository.hasPermission(cashierLogin.token, 'inventory.transfer')).toBe(false);
+    expect(AuthRepository.hasPermission(cashierLogin.token, 'inventory.product.edit')).toBe(false);
     expect(() => AuthRepository.requirePermission(cashierLogin.token, 'inventory.adjust')).toThrow('Unauthorized');
+  });
+
+  it('should support transfer detail lookup and mark-in-transit workflow', () => {
+    const adminLogin = AuthRepository.login('admin', 'admin123');
+    const today = new Date().toISOString().split('T')[0];
+    const transfer = StockTransferRepository.create({
+      id: 'TEST-TRANSFER-TRANSIT-001',
+      transfer_no: 'TEST-TRANSFER-TRANSIT-001',
+      source_branch_id: 'TEST-WH-SOURCE',
+      destination_branch_id: 'TEST-WH-DEST',
+      request_date: today,
+      notes: 'Transit workflow test',
+      items: [{ product_id: 'P001', quantity: 1, unit_cost: 100 }]
+    }, adminLogin.user!.id);
+    expect(transfer.success).toBe(true);
+    const byId = StockTransferRepository.getById('TEST-TRANSFER-TRANSIT-001') as any;
+    expect(byId).toBeDefined();
+    expect(byId.items.length).toBeGreaterThan(0);
+    expect(StockTransferRepository.markInTransit('TEST-TRANSFER-TRANSIT-001', adminLogin.user!.id)).toBe(true);
+    const inTransit = StockTransferRepository.getById('TEST-TRANSFER-TRANSIT-001') as any;
+    expect(inTransit.status).toBe('In Transit');
+    expect(StockTransferRepository.complete('TEST-TRANSFER-TRANSIT-001', adminLogin.user!.id)).toBe(true);
+    const done = StockTransferRepository.getById('TEST-TRANSFER-TRANSIT-001') as any;
+    expect(done.status).toBe('Completed');
+  });
+
+  it('should require adjustment reason and provide adjustment detail lookup', () => {
+    expect(() => InventoryAdjustmentRepository.create({
+      branch_id: 'B001',
+      adjustment_date: '2026-05-25',
+      adjustment_type: 'Manual Correction',
+      reason: '',
+      items: [{ product_id: 'P001', quantity_change: 1 }]
+    }, 'U001')).toThrow('Adjustment reason is required.');
+
+    const created = InventoryAdjustmentRepository.create({
+      id: 'TEST-ADJ-BYID-001',
+      branch_id: 'B001',
+      adjustment_date: '2026-05-25',
+      adjustment_type: 'Manual Correction',
+      reason: 'QA reason',
+      items: [{ product_id: 'P001', quantity_change: 1 }]
+    }, 'U001');
+    expect(created.success).toBe(true);
+    const row = InventoryAdjustmentRepository.getById('TEST-ADJ-BYID-001') as any;
+    expect(row).toBeDefined();
+    expect(row.items.length).toBeGreaterThan(0);
+  });
+
+  it('should provide product movement, branch stock, and audit trail profile data', () => {
+    const productId = 'P001';
+    const branchId = 'B001';
+    const beforeStock = ProductRepository.getById(productId) as any;
+    const created = InventoryAdjustmentRepository.create({
+      branch_id: branchId,
+      adjustment_date: '2026-05-24',
+      adjustment_type: 'Manual Correction',
+      reason: 'Test profile movement',
+      notes: 'Inventory profile test',
+      items: [{ product_id: productId, quantity_change: 1 }]
+    }, 'U001');
+    expect(created.success).toBe(true);
+    const movements = ProductRepository.getStockMovements(productId, { branch_id: branchId }) as any[];
+    expect(movements.length).toBeGreaterThan(0);
+    expect(movements.some((row) => row.reference_type === 'ADJUSTMENT')).toBe(true);
+    const branchStock = ProductRepository.getBranchStock(productId) as any[];
+    expect(branchStock.length).toBeGreaterThan(0);
+    const p = ProductRepository.getById(productId) as any;
+    expect(Number(p.stock_quantity || 0)).toBeGreaterThanOrEqual(Number(beforeStock.stock_quantity || 0));
+    const trail = ProductRepository.getAuditTrail(productId) as any[];
+    expect(Array.isArray(trail)).toBe(true);
   });
 
   it('should run excel/csv templates, import data with validation, track jobs, and run exports', async () => {
@@ -2522,6 +2644,79 @@ describe('SQLite Database Repositories Integration Tests', () => {
 
       const trail = SaleRepository.getAuditTrail(invoiceNo) as any[];
       expect(trail.some((row) => row.action === 'SALE_VOID')).toBe(true);
+    });
+
+    it('should return complete receipt detail metadata for POS receipts', () => {
+      const shift = CashierShiftRepository.openShift({
+        user_id: 'U001',
+        cashier_name: 'Kashif Ali',
+        branch_id: 'B001',
+        register_id: 'REG-B001',
+        opening_cash: 1000
+      }).shift as any;
+
+      const invoiceNo = `TEST-RECEIPT-DETAIL-${Date.now()}`;
+      expect(SaleRepository.create({
+        invoiceNo,
+        customerName: 'Walk-in Customer',
+        customer_type: 'WALK_IN',
+        cashier_id: 'U001',
+        cashier_name: 'Kashif Ali',
+        branch_id: 'B001',
+        branch_name: 'Main Branch',
+        register_id: 'REG-B001',
+        shift_id: shift.id,
+        payment_method: 'Cash',
+        date: '2026-05-22',
+        sale_time: '2026-05-22T10:00:00.000Z',
+        subtotal: 300,
+        discount: 0,
+        total: 300,
+        status: 'Paid',
+        tax_rate: 0,
+        items: [{ product_id: 'P001', quantity: 1, price: 300 }]
+      })).toBe(true);
+
+      const detail = SaleRepository.getReceiptDetail(invoiceNo) as any;
+      expect(detail).toBeDefined();
+      expect(detail.sale.invoiceNo).toBe(invoiceNo);
+      expect(detail.sale.branch_id).toBe('B001');
+      expect(detail.sale.cashier_id).toBe('U001');
+      expect(Array.isArray(detail.items)).toBe(true);
+      expect(detail.items.length).toBeGreaterThan(0);
+      expect(detail.summary.total).toBe(300);
+      expect(detail.statuses.stock_posted).toBe(true);
+      expect(detail.statuses.return_status).toBe('NONE');
+    });
+
+    it('should allow voiding registered sale even when customer later becomes inactive', () => {
+      const customerName = `TEST-VOID-INACTIVE-${Date.now()}`;
+      expect(CustomerRepository.create({
+        name: customerName,
+        phone: '03009998888',
+        status: 'active'
+      })).toBe(true);
+
+      const invoiceNo = `TEST-VOID-INACTIVE-SALE-${Date.now()}`;
+      expect(SaleRepository.create({
+        invoiceNo,
+        customerName,
+        customer_id: customerName,
+        customer_type: 'REGISTERED',
+        date: '2026-05-22',
+        subtotal: 150,
+        discount: 0,
+        total: 150,
+        status: 'Credit',
+        tax_rate: 0,
+        items: [{ product_id: 'P001', quantity: 1, price: 150 }]
+      })).toBe(true);
+
+      expect(CustomerRepository.deactivate(customerName)).toBe(true);
+      const result = SaleRepository.voidSale(invoiceNo, 'customer inactive void test', { user_id: 'U001', name: 'Tester' });
+      expect(result.success).toBe(true);
+      const row = SaleRepository.getById(invoiceNo) as any;
+      expect(row.status).toBe('VOIDED');
     });
 
     it('should provide customer statement including POS and invoices', () => {

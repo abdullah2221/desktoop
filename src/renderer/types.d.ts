@@ -18,7 +18,11 @@ export interface IElectronAPI {
     create: (product: Partial<Product>) => Promise<{ success: boolean; id?: string }>;
     update: (product: Partial<Product>) => Promise<boolean>;
     deactivate: (id: string) => Promise<boolean>;
+    reactivate: (id: string) => Promise<boolean>;
     updateStock: (id: string, newStock: number) => Promise<boolean>;
+    getStockMovements: (productId: string, filters?: Record<string, unknown>) => Promise<Array<Record<string, any>>>;
+    getBranchStock: (productId: string) => Promise<Array<Record<string, any>>>;
+    getAuditTrail: (productId: string) => Promise<Array<Record<string, any>>>;
   };
   categories: {
     getAll: () => Promise<Category[]>;
@@ -167,6 +171,7 @@ export interface IElectronAPI {
   };
   stockMovements: {
     getByProduct: (productId: string) => Promise<StockMovement[]>;
+    getHistory: (filters?: Record<string, unknown>) => Promise<StockMovement[]>;
   };
   supplierPayments: {
     getBySupplier: (supplierId: string) => Promise<SupplierPayment[]>;
@@ -341,19 +346,24 @@ export interface IElectronAPI {
   };
   branchInventory: {
     getAll: (branchId?: string) => Promise<BranchInventory[]>;
+    getByProduct: (productId: string) => Promise<BranchInventory[]>;
     upsert: (payload: Partial<BranchInventory>) => Promise<boolean>;
     lowStock: (branchId?: string) => Promise<BranchInventory[]>;
     valuation: (branchId?: string) => Promise<Record<string, any>>;
+    getStockCard: (productId: string, branchId?: string) => Promise<Record<string, any>>;
   };
   stockTransfers: {
     getAll: () => Promise<StockTransfer[]>;
+    getById: (id: string) => Promise<StockTransfer | null>;
     create: (payload: Partial<StockTransfer>) => Promise<{ success: boolean; id?: string }>;
     approve: (id: string) => Promise<boolean>;
+    markInTransit: (id: string) => Promise<boolean>;
     complete: (id: string) => Promise<boolean>;
     reject: (id: string) => Promise<boolean>;
   };
   inventoryAdjustments: {
     getAll: () => Promise<InventoryAdjustment[]>;
+    getById: (adjustmentId: string) => Promise<InventoryAdjustment | null>;
     create: (payload: Partial<InventoryAdjustment>) => Promise<{ success: boolean; id?: string }>;
     accountingFoundation: (adjustmentId: string) => Promise<Record<string, any>>;
   };

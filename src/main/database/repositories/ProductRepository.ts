@@ -114,9 +114,29 @@ export class ProductRepository {
 
   static create(product: any) {
     try {
-      console.log('[ProductRepository] Attempting SQLite insert for product payload:', product);
       const db = getDatabase();
       const id = product.id || `P-${Math.floor(1000 + Math.random() * 9000)}`;
+      const sku = String(product.sku || id).trim();
+      const barcode = String(product.barcode || '').trim();
+      const name = String(product.name || '').trim();
+      const purchaseCost = Number(product.purchase_cost || 0);
+      const salePrice = Number(product.sale_price || 0);
+      const stockQty = Number(product.stock_quantity || 0);
+      const minStock = Number(product.minimum_stock || 0);
+
+      if (!sku) throw new Error('SKU is required.');
+      if (!name) throw new Error('Product name is required.');
+      if (purchaseCost < 0) throw new Error('Purchase cost cannot be negative.');
+      if (salePrice < 0) throw new Error('Sale price cannot be negative.');
+      if (stockQty < 0) throw new Error('Stock quantity cannot be negative.');
+      if (minStock < 0) throw new Error('Minimum stock cannot be negative.');
+
+      const skuExists = db.prepare('SELECT id FROM products WHERE lower(sku)=lower(?) LIMIT 1').get(sku) as { id: string } | undefined;
+      if (skuExists) throw new Error('Duplicate SKU is not allowed.');
+      if (barcode) {
+        const barcodeExists = db.prepare('SELECT id FROM products WHERE barcode=? LIMIT 1').get(barcode) as { id: string } | undefined;
+        if (barcodeExists) throw new Error('Duplicate barcode is not allowed.');
+      }
 
       const stmt = db.prepare(`
         INSERT INTO products (
@@ -135,40 +155,61 @@ export class ProductRepository {
 
       const info = stmt.run({
         id,
-        sku: product.sku || id,
-        barcode: product.barcode || '',
-        name: product.name,
+        sku,
+        barcode,
+        name,
         category_id: product.category_id || null,
         category_name: product.category_name || '',
         supplier_id: product.supplier_id || null,
         brand_id: product.brand_id || null,
         unit_id: product.unit_id || null,
-        purchase_cost: product.purchase_cost || 0,
-        sale_price: product.sale_price || 0,
+        purchase_cost: purchaseCost,
+        sale_price: salePrice,
         wholesale_price: product.wholesale_price || 0,
         retail_price: product.retail_price || 0,
-        stock_quantity: product.stock_quantity || 0,
-        opening_stock: product.stock_quantity || 0,
-        minimum_stock: product.minimum_stock || 0,
+        stock_quantity: stockQty,
+        opening_stock: stockQty,
+        minimum_stock: minStock,
         rack_location: product.rack_location || '',
         expiry_date: product.expiry_date || null,
         batch_number: product.batch_number || '',
         status: product.status || 'active'
       });
 
-      console.log('[ProductRepository] Product successfully inserted into SQLite. Changes:', info.changes);
       if (info.changes > 0) {
         AuditLogRepository.write({ action: 'PRODUCT_CREATE', details: `Product ${id} created` });
       }
       return info.changes > 0 ? { success: true, id } : { success: false };
     } catch (err: any) {
-      console.error('[ProductRepository] SQLite insert failed critically:', err.message || err);
       throw err;
     }
   }
 
   static update(product: any) {
     const db = getDatabase();
+    const sku = String(product.sku || product.id || '').trim();
+    const barcode = String(product.barcode || '').trim();
+    const name = String(product.name || '').trim();
+    const purchaseCost = Number(product.purchase_cost || 0);
+    const salePrice = Number(product.sale_price || 0);
+    const stockQty = Number(product.stock_quantity || 0);
+    const minStock = Number(product.minimum_stock || 0);
+
+    if (!product.id) throw new Error('Product id is required.');
+    if (!sku) throw new Error('SKU is required.');
+    if (!name) throw new Error('Product name is required.');
+    if (purchaseCost < 0) throw new Error('Purchase cost cannot be negative.');
+    if (salePrice < 0) throw new Error('Sale price cannot be negative.');
+    if (stockQty < 0) throw new Error('Stock quantity cannot be negative.');
+    if (minStock < 0) throw new Error('Minimum stock cannot be negative.');
+
+    const skuExists = db.prepare('SELECT id FROM products WHERE lower(sku)=lower(?) AND id<>? LIMIT 1').get(sku, product.id) as { id: string } | undefined;
+    if (skuExists) throw new Error('Duplicate SKU is not allowed.');
+    if (barcode) {
+      const barcodeExists = db.prepare('SELECT id FROM products WHERE barcode=? AND id<>? LIMIT 1').get(barcode, product.id) as { id: string } | undefined;
+      if (barcodeExists) throw new Error('Duplicate barcode is not allowed.');
+    }
+
     const stmt = db.prepare(`
       UPDATE products 
       SET 
@@ -195,20 +236,20 @@ export class ProductRepository {
     `);
     const info = stmt.run({
       id: product.id,
-      sku: product.sku || product.id,
-      barcode: product.barcode || '',
-      name: product.name,
+      sku,
+      barcode,
+      name,
       category_id: product.category_id || null,
       category_name: product.category_name || '',
       supplier_id: product.supplier_id || null,
       brand_id: product.brand_id || null,
       unit_id: product.unit_id || null,
-      purchase_cost: product.purchase_cost || 0,
-      sale_price: product.sale_price || 0,
+      purchase_cost: purchaseCost,
+      sale_price: salePrice,
       wholesale_price: product.wholesale_price || 0,
       retail_price: product.retail_price || 0,
-      stock_quantity: product.stock_quantity || 0,
-      minimum_stock: product.minimum_stock || 0,
+      stock_quantity: stockQty,
+      minimum_stock: minStock,
       rack_location: product.rack_location || '',
       expiry_date: product.expiry_date || null,
       batch_number: product.batch_number || '',
@@ -229,9 +270,65 @@ export class ProductRepository {
     return info.changes > 0;
   }
 
+  static reactivate(id: string) {
+    const db = getDatabase();
+    const info = db.prepare("UPDATE products SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+    if (info.changes > 0) {
+      AuditLogRepository.write({ action: 'PRODUCT_REACTIVATE', details: `Product ${id} reactivated` });
+    }
+    return info.changes > 0;
+  }
+
   static updateStock(id: string, newStock: number) {
     const db = getDatabase();
+    if (Number(newStock) < 0) throw new Error('Stock cannot be negative.');
     const info = db.prepare('UPDATE products SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newStock, id);
     return info.changes > 0;
+  }
+
+  static getStockMovements(productId: string, filters: { branch_id?: string; date_from?: string; date_to?: string; movement_type?: string } = {}) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT *
+      FROM stock_movements
+      WHERE product_id = @product_id
+        AND (@branch_id IS NULL OR branch_id=@branch_id)
+        AND (@date_from IS NULL OR date >= @date_from)
+        AND (@date_to IS NULL OR date <= @date_to)
+        AND (@movement_type IS NULL OR movement_type=@movement_type)
+      ORDER BY date DESC, created_at DESC
+    `).all({
+      product_id: productId,
+      branch_id: filters.branch_id || null,
+      date_from: filters.date_from || null,
+      date_to: filters.date_to || null,
+      movement_type: filters.movement_type || null
+    });
+  }
+
+  static getBranchStock(productId: string) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT
+        bi.*,
+        b.branch_code,
+        COALESCE(b.branch_name, b.name) as branch_name,
+        (bi.quantity_on_hand - bi.quantity_reserved) as available_quantity
+      FROM branch_inventory bi
+      JOIN branches b ON b.id = bi.branch_id
+      WHERE bi.product_id=?
+      ORDER BY b.branch_code ASC
+    `).all(productId);
+  }
+
+  static getAuditTrail(productId: string) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT id, action, details, created_at, user_id
+      FROM audit_logs
+      WHERE details LIKE '%' || ? || '%'
+      ORDER BY created_at DESC
+      LIMIT 100
+    `).all(productId);
   }
 }
