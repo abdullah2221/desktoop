@@ -6,6 +6,85 @@ import { AuditLogRepository } from './AuditLogRepository';
 import { NotificationRepository } from './NotificationRepository';
 
 export class BackupRepository {
+  private static parseBool(value: string | undefined, fallback = false) {
+    if (value === undefined || value === null || value === '') return fallback;
+    return String(value).toLowerCase() === 'true';
+  }
+
+  private static parseDate(value?: string) {
+    if (!value) return null;
+    const dt = new Date(value);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+
+  static runAutomaticBackupIfDue(trigger: 'startup' | 'interval' = 'interval') {
+    const settings = this.getSettings();
+    const enabled = this.parseBool(settings.automatic_backup_enabled, false);
+    if (!enabled) {
+      return { ran: false, reason: 'automatic_backup_disabled' };
+    }
+
+    const intervalMinutes = Math.max(5, Number(settings.auto_backup_interval_minutes || 1440));
+    const now = new Date();
+    const lastBackupAt = this.parseDate(settings.last_backup_at);
+    const elapsedMs = lastBackupAt ? now.getTime() - lastBackupAt.getTime() : Number.POSITIVE_INFINITY;
+    const dueMs = intervalMinutes * 60 * 1000;
+
+    if (elapsedMs < dueMs) {
+      return { ran: false, reason: 'not_due', next_due_in_ms: dueMs - elapsedMs, interval_minutes: intervalMinutes };
+    }
+
+    const notes = trigger === 'startup'
+      ? `Automatic backup triggered on app startup (interval ${intervalMinutes} min).`
+      : `Automatic scheduled backup (interval ${intervalMinutes} min).`;
+
+    const created = this.createFull({
+      notes
+    });
+    return { ran: true, trigger, interval_minutes: intervalMinutes, backup: created };
+  }
+
+  static createFull(options: {
+    destinationDir?: string;
+    password?: string;
+    notes?: string;
+    actorId?: string;
+    storeName?: string;
+    appVersion?: string;
+  }) {
+    const db = getDatabase();
+    const created = BackupService.createBackup({
+      backupType: 'full',
+      destinationDir: options.destinationDir,
+      password: options.password,
+      notes: options.notes,
+      createdBy: options.actorId,
+      storeName: options.storeName,
+      appVersion: options.appVersion
+    });
+    const stat = fs.statSync(created.filePath);
+    const id = `BKP-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    db.prepare(`
+      INSERT INTO backup_history (
+        id, file_path, file_name, backup_type, status, file_size, integrity_status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      created.filePath,
+      path.basename(created.filePath),
+      'full',
+      'success',
+      stat.size,
+      created.manifest.integrity_status,
+      options.notes || ''
+    );
+    this.updateSetting('last_backup_path', created.filePath);
+    this.updateSetting('last_backup_at', created.manifest.created_at);
+    this.enforceRetention();
+    AuditLogRepository.write({ action: 'BACKUP_CREATE', user_id: options.actorId, details: `Full backup created: ${created.filePath}` });
+    return { success: true, id, file_path: created.filePath, manifest: created.manifest };
+  }
+
   static create(type: 'manual' | 'auto' | 'pre-restore' = 'manual', actorId?: string) {
     try {
       const db = getDatabase();
@@ -59,10 +138,31 @@ export class BackupRepository {
     return BackupService.validateBackup(filePath);
   }
 
+  static validateFile(filePath: string, password?: string) {
+    const result = BackupService.validateBackup(filePath, password);
+    AuditLogRepository.write({
+      action: 'BACKUP_VALIDATE',
+      details: `Backup validate ${filePath} -> ${result.valid ? 'valid' : 'invalid'}`
+    });
+    return result;
+  }
+
   static restore(filePath: string, actorId?: string) {
     const result = BackupService.restoreBackup(filePath);
     AuditLogRepository.write({ action: 'BACKUP_RESTORE', user_id: actorId, details: `Restored from ${filePath}` });
     return result;
+  }
+
+  static restoreFile(filePath: string, options: { password?: string; actorId?: string }) {
+    const result = BackupService.restoreBackup(filePath, options.password);
+    AuditLogRepository.write({ action: 'BACKUP_RESTORE', user_id: options.actorId, details: `Restored from ${filePath}` });
+    return result;
+  }
+
+  static createSafetyBackup(actorId?: string) {
+    const filePath = BackupService.createBackupFile('erp.pre-restore');
+    AuditLogRepository.write({ action: 'BACKUP_CREATE', user_id: actorId, details: `Safety backup created: ${filePath}` });
+    return { success: true, file_path: filePath };
   }
 
   static integrityCheck() {

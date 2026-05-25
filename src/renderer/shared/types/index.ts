@@ -91,15 +91,21 @@ export interface Expense {
 }
 
 export interface Customer {
+  customer_code?: string;
   name: string;
   phone: string;
   whatsapp?: string;
+  email?: string;
   address?: string;
+  city?: string;
+  notes?: string;
   opening_balance?: number;
   totalPurchases: number;
   credit: number; // Outstanding Udhaar balance
+  current_balance?: number;
   credit_limit?: number;
   due_days?: number;
+  due_date?: string | null;
   status?: 'active' | 'inactive';
   lastPayment: string;
 }
@@ -334,6 +340,87 @@ export interface StockTransferItem {
   product_name?: string;
   quantity: number;
   unit_cost?: number;
+}
+
+export interface DashboardFilter {
+  date?: string;
+  date_from?: string;
+  date_to?: string;
+  branch_id?: string;
+  cashier_id?: string;
+  class_id?: string;
+  register_id?: string;
+}
+
+export interface DashboardMetricCard {
+  key: string;
+  label: string;
+  value: number;
+  trend_pct?: number;
+}
+
+export interface DashboardOverview {
+  date_from: string;
+  date_to: string;
+  metrics: Record<string, number>;
+  trends: Record<string, number>;
+}
+
+export interface SalesTrendPoint {
+  bucket: string;
+  transactions: number;
+  sales: number;
+  discounts?: number;
+}
+
+export interface PaymentBreakdownPoint {
+  payment_method: string;
+  transactions: number;
+  amount: number;
+}
+
+export interface TopProductPoint {
+  product_id: string;
+  product_name: string;
+  qty: number;
+  revenue: number;
+  profit?: number;
+}
+
+export interface ShiftSummaryPoint {
+  id: string;
+  cashier_name: string;
+  branch_id: string;
+  register_id: string;
+  status: string;
+  opening_cash: number;
+  expected_cash: number;
+  counted_cash?: number;
+  difference?: number;
+}
+
+export interface DashboardDateDetail {
+  date: string;
+  sales: Array<Record<string, any>>;
+  invoices: Array<Record<string, any>>;
+  returns: Array<Record<string, any>>;
+  expenses: Array<Record<string, any>>;
+  shifts: Array<Record<string, any>>;
+  top_products: Array<Record<string, any>>;
+  customer_payments: Array<Record<string, any>>;
+  supplier_payments: Array<Record<string, any>>;
+  journal_summary: Array<Record<string, any>>;
+  tax_summary: Record<string, any>;
+  discounts: Array<Record<string, any>>;
+  voids: Array<Record<string, any>>;
+  low_stock_events: Array<Record<string, any>>;
+}
+
+export interface DashboardMetricDetail {
+  title: string;
+  summary: Record<string, any>;
+  rows: Array<Record<string, any>>;
+  columns: string[];
 }
 
 export interface InventoryAdjustment {

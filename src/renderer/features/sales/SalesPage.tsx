@@ -6,6 +6,8 @@ import { Badge } from '../../shared/ui/Badge';
 import { Card } from '../../shared/ui/Card';
 import { Input } from '../../shared/ui/Input';
 import { SalesReceiptDetail } from './SalesReceiptDetail';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
+import { CircleOff, Eye, FileOutput, Pencil, Printer, RotateCcw } from 'lucide-react';
 
 const defaultLine = (): QuoteItem => ({ product_id: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: 0, line_total: 0 });
 
@@ -329,19 +331,21 @@ export const SalesPage: React.FC = () => {
                     <td>Rs. {Number(row.tax_amount || 0).toLocaleString()}</td>
                     <td>Rs. {Number(row.total || 0).toLocaleString()}</td>
                     <td><Badge variant={statusBadge(row.status) as any}>{row.status}</Badge></td>
-                    <td className="flex gap-1">
-                      <Button size="sm" variant="secondary" onClick={() => setSelectedReceiptNo(row.invoiceNo)}>View</Button>
-                      {hasPermission('sales.receipt.reprint') && <Button size="sm" onClick={async () => {
+                    <td>
+                      <div className="flex items-center gap-1">
+                      <IconActionButton icon={<Eye className="w-3.5 h-3.5" />} tooltip="View details" variant="primary" onClick={() => setSelectedReceiptNo(row.invoiceNo)} />
+                      {hasPermission('sales.receipt.reprint') && <IconActionButton icon={<Printer className="w-3.5 h-3.5" />} tooltip="Print receipt" onClick={async () => {
                         const payload = await window.api.receipts.fromSale(row.invoiceNo);
                         await window.api.receipts.print(payload, false);
-                      }}>Reprint</Button>}
-                      {hasPermission('sales.return') && <Button size="sm" variant="danger" onClick={() => setActiveTab('sales_returns')}>Return</Button>}
-                      {hasPermission('sales.void') && row.status !== 'VOIDED' && <Button size="sm" variant="danger" onClick={async () => {
+                      }} />}
+                      {hasPermission('sales.return') && <IconActionButton icon={<RotateCcw className="w-3.5 h-3.5" />} tooltip="Create return" onClick={() => setActiveTab('sales_returns')} />}
+                      {hasPermission('sales.void') && <IconActionButton icon={<CircleOff className="w-3.5 h-3.5" />} tooltip="Void sale" danger disabled={row.status === 'VOIDED'} disabledTooltip="Sale is already voided" onClick={async () => {
                         await window.api.sales.void(row.invoiceNo, 'Voided from Sales page');
                         notify('success', `Sale ${row.invoiceNo} voided.`);
                         await loadPosSales();
                         await reloadProducts();
-                      }}>Void</Button>}
+                      }} />}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -363,9 +367,11 @@ export const SalesPage: React.FC = () => {
                       <td>{q.quote_no}</td><td>{q.customer_name}</td><td>{q.quote_date}</td><td>{q.expiry_date}</td>
                       <td><Badge variant={statusBadge(q.status) as any}>{q.status}</Badge></td>
                       <td>Rs. {q.grand_total.toLocaleString()}</td>
-                      <td className="flex gap-1">
-                        <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); editQuote(q.id); }}>Edit</Button>
-                        <Button id={`quote-convert-${q.id}`} size="sm" onClick={(e) => { e.stopPropagation(); convertQuote(q.id); }}>Convert</Button>
+                      <td>
+                        <div className="flex items-center gap-1">
+                        <IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit record" onClick={(e) => { e.stopPropagation(); editQuote(q.id); }} />
+                        <IconActionButton icon={<FileOutput className="w-3.5 h-3.5" />} tooltip="Convert Quote to Invoice" variant="success" onClick={(e) => { e.stopPropagation(); convertQuote(q.id); }} />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -426,10 +432,12 @@ export const SalesPage: React.FC = () => {
                       <td>{(inv as any).branch_name || inv.branch_id || '-'}</td>
                       <td><Badge variant={statusBadge(inv.status) as any}>{inv.status}</Badge></td>
                       <td>Rs. {inv.grand_total.toLocaleString()}</td><td>Rs. {inv.balance_due.toLocaleString()}</td>
-                      <td className="flex gap-1">
-                        <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); editInvoice(inv.id); }}>Edit</Button>
-                        <Button id={`invoice-finalize-${inv.id}`} size="sm" onClick={(e) => { e.stopPropagation(); finalizeInvoice(inv.id); }}>Finalize</Button>
-                        <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); voidInvoice(inv.id); }}>Void</Button>
+                      <td>
+                        <div className="flex items-center gap-1">
+                        <IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit record" onClick={(e) => { e.stopPropagation(); editInvoice(inv.id); }} />
+                        <IconActionButton icon={<FileOutput className="w-3.5 h-3.5" />} tooltip="Finalize Invoice" variant="success" onClick={(e) => { e.stopPropagation(); finalizeInvoice(inv.id); }} />
+                        <IconActionButton icon={<CircleOff className="w-3.5 h-3.5" />} tooltip="Void sale" danger onClick={(e) => { e.stopPropagation(); voidInvoice(inv.id); }} />
+                        </div>
                       </td>
                     </tr>
                   ))}

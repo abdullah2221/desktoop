@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '../../shared/ui/Button';
 import { Badge } from '../../shared/ui/Badge';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
+import { CircleOff, Copy, Printer, RotateCcw } from 'lucide-react';
 
 interface Props {
   invoiceNo: string;
@@ -144,12 +146,12 @@ export const SalesReceiptDetail: React.FC<Props> = ({ invoiceNo, canReprint, can
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
-              {canReprint && <Button size="sm" onClick={() => reprint(false)}>Reprint</Button>}
-              {canReprint && <Button size="sm" variant="secondary" onClick={() => reprint(true)}>Duplicate Copy</Button>}
-              {canReturn && <Button size="sm" variant="secondary" onClick={onOpenReturn}>Create Return</Button>}
+            <div className="flex gap-1 pt-2">
+              {canReprint && <IconActionButton icon={<Printer className="w-3.5 h-3.5" />} tooltip="Print receipt" variant="primary" onClick={() => reprint(false)} />}
+              {canReprint && <IconActionButton icon={<Copy className="w-3.5 h-3.5" />} tooltip="Print duplicate receipt" onClick={() => reprint(true)} />}
+              {canReturn && <IconActionButton icon={<RotateCcw className="w-3.5 h-3.5" />} tooltip="Create return" onClick={onOpenReturn} />}
               {canVoid && detail.sale.status !== 'VOIDED' && (
-                <Button size="sm" variant="danger" onClick={() => onVoid(invoiceNo)}>Void Sale</Button>
+                <IconActionButton icon={<CircleOff className="w-3.5 h-3.5" />} tooltip="Void sale" danger onClick={() => onVoid(invoiceNo)} />
               )}
             </div>
           </div>

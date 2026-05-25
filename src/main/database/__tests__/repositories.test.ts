@@ -50,6 +50,7 @@ import { NotificationRuleRepository } from '../repositories/NotificationRuleRepo
 import { NotificationService } from '../repositories/NotificationService';
 import { ReceiptService } from '../ReceiptService';
 import { CashierShiftRepository } from '../repositories/CashierShiftRepository';
+import { DashboardRepository } from '../repositories/DashboardRepository';
 import crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -257,6 +258,47 @@ describe('SQLite Database Repositories Integration Tests', () => {
     customers = CustomerRepository.getAll() as Array<{ name: string; credit: number }>;
     arif = customers.find((c) => c.name === customerName);
     expect(arif?.credit).toBe(4000);
+  });
+
+  it('should support customer create/edit/deactivate/reactivate lifecycle', () => {
+    const name = `TEST-CUST-LIFE-${Date.now()}`;
+    expect(CustomerRepository.create({
+      customer_code: `C-${Date.now()}`,
+      name,
+      phone: '03001112222',
+      whatsapp: '03001112222',
+      email: 'life@test.local',
+      city: 'Lahore',
+      credit_limit: 5000,
+      due_days: 15,
+      status: 'active'
+    })).toBe(true);
+    let row = CustomerRepository.getByName(name) as any;
+    expect(row).toBeTruthy();
+    expect(row.email).toBe('life@test.local');
+
+    expect(CustomerRepository.update({
+      name,
+      customer_code: row.customer_code,
+      phone: '03009998888',
+      whatsapp: '03009998888',
+      email: 'updated@test.local',
+      city: 'Karachi',
+      credit_limit: 7000,
+      due_days: 21,
+      status: 'active'
+    })).toBe(true);
+    row = CustomerRepository.getByName(name) as any;
+    expect(row.phone).toBe('03009998888');
+    expect(row.city).toBe('Karachi');
+
+    expect(CustomerRepository.deactivate(name)).toBe(true);
+    row = CustomerRepository.getByName(name) as any;
+    expect(row.status).toBe('inactive');
+
+    expect(CustomerRepository.reactivate(name)).toBe(true);
+    row = CustomerRepository.getByName(name) as any;
+    expect(row.status).toBe('active');
   });
 
   it('should persist sale invoice with sale items and stock movements', () => {
@@ -605,6 +647,93 @@ describe('SQLite Database Repositories Integration Tests', () => {
     expect(taxSummary.summary.inputTax).toBeGreaterThan(0);
   });
 
+  it('should produce advanced operational reports for cashier, shift, discounts, returns, and drawer control', () => {
+    const today = new Date().toISOString().split('T')[0];
+    const rangeFrom = '2000-01-01';
+
+    const dailySales = ReportRepository.dailySalesSummaryReport(rangeFrom, today);
+    expect(Array.isArray(dailySales.rows)).toBe(true);
+
+    const productSales = ReportRepository.productSalesReport(rangeFrom, today);
+    expect(Array.isArray(productSales.rows)).toBe(true);
+
+    const discountSummary = ReportRepository.discountSummaryReport(rangeFrom, today);
+    expect(Array.isArray(discountSummary.byInvoice)).toBe(true);
+    expect(Array.isArray(discountSummary.byProduct)).toBe(true);
+
+    const returnSummary = ReportRepository.returnSummaryReport(rangeFrom, today);
+    expect(Array.isArray(returnSummary.rows)).toBe(true);
+    expect(returnSummary.totals.total_returns).toBeGreaterThanOrEqual(0);
+
+    const voidSummary = ReportRepository.voidSummaryReport(rangeFrom, today);
+    expect(Array.isArray(voidSummary.rows)).toBe(true);
+
+    const paymentMethod = ReportRepository.paymentMethodReport(rangeFrom, today);
+    expect(Array.isArray(paymentMethod.rows)).toBe(true);
+
+    const drawer = ReportRepository.cashDrawerReconciliationReport(rangeFrom, today);
+    expect(Array.isArray(drawer.rows)).toBe(true);
+
+    const branchPerf = ReportRepository.branchPerformanceReport(rangeFrom, today);
+    expect(Array.isArray(branchPerf.rows)).toBe(true);
+
+    const cashierSales = ReportRepository.cashierSalesReport(rangeFrom, today);
+    expect(Array.isArray(cashierSales.rows)).toBe(true);
+
+    const hourlySales = ReportRepository.hourlySalesReport(rangeFrom, today);
+    expect(Array.isArray(hourlySales.rows)).toBe(true);
+  });
+
+  it('should provide dashboard overview, trends, and date drilldown with filters', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const filters = { date_from: '2000-01-01', date_to: today, branch_id: 'B001' };
+
+    const overview = DashboardRepository.getOverview(filters);
+    expect(overview).toBeDefined();
+    expect(overview.metrics).toBeDefined();
+    expect(typeof overview.metrics.today_pos_sales).toBe('number');
+
+    const trend = DashboardRepository.getSalesTrend(filters);
+    expect(Array.isArray(trend.rows)).toBe(true);
+
+    const payment = DashboardRepository.getPaymentBreakdown(filters);
+    expect(Array.isArray(payment.rows)).toBe(true);
+
+    const topProducts = DashboardRepository.getTopProducts(filters);
+    expect(Array.isArray(topProducts.rows)).toBe(true);
+
+    const shiftSummary = DashboardRepository.getShiftSummary(filters);
+    expect(Array.isArray(shiftSummary.rows)).toBe(true);
+
+    const detail = DashboardRepository.getDateDetail(today, filters);
+    expect(detail.date).toBe(today);
+    expect(Array.isArray(detail.sales)).toBe(true);
+    expect(Array.isArray(detail.expenses)).toBe(true);
+    expect(Array.isArray(detail.shifts)).toBe(true);
+  });
+
+  it('should provide metric-specific dashboard details for cards', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const filters = { date_from: '2000-01-01', date_to: today, branch_id: 'B001' };
+
+    const posDetail = DashboardRepository.getMetricDetail('pos_sales', filters);
+    expect(posDetail.title).toContain('POS');
+    expect(Array.isArray(posDetail.rows)).toBe(true);
+    expect(posDetail.columns.length).toBeGreaterThan(0);
+
+    const lowStockDetail = DashboardRepository.getMetricDetail('low_stock', filters);
+    expect(lowStockDetail.title).toContain('Low Stock');
+    expect(Array.isArray(lowStockDetail.rows)).toBe(true);
+
+    const khataDetail = DashboardRepository.getMetricDetail('khata_due', filters);
+    expect(khataDetail.title).toContain('Khata');
+    expect(Array.isArray(khataDetail.rows)).toBe(true);
+
+    const topProductsDetail = DashboardRepository.getMetricDetail('top_products', filters);
+    expect(topProductsDetail.title).toContain('Top Products');
+    expect(Array.isArray(topProductsDetail.rows)).toBe(true);
+  });
+
   it('should authenticate users, hash passwords, assign roles, and enforce permissions', () => {
     const adminLogin = AuthRepository.login('admin', 'admin123');
     expect(adminLogin.token).toBeTruthy();
@@ -729,6 +858,64 @@ describe('SQLite Database Repositories Integration Tests', () => {
     for (const row of history) {
       if (fs.existsSync(row.file_path)) fs.unlinkSync(row.file_path);
     }
+  });
+
+  it('should run automatic backup when enabled and due, then skip when not due', () => {
+    const adminLogin = AuthRepository.login('admin', 'admin123');
+    BackupRepository.updateSettings({
+      automatic_backup_enabled: 'true',
+      auto_backup_interval_minutes: '5',
+      last_backup_at: '2000-01-01T00:00:00.000Z'
+    });
+
+    const first = BackupRepository.runAutomaticBackupIfDue('startup') as any;
+    expect(first.ran).toBe(true);
+    expect(first.backup?.success).toBe(true);
+
+    const second = BackupRepository.runAutomaticBackupIfDue('interval') as any;
+    expect(second.ran).toBe(false);
+    expect(second.reason).toBe('not_due');
+
+    BackupRepository.updateSettings({ automatic_backup_enabled: 'false' });
+    AuthRepository.logout(adminLogin.token);
+  });
+
+  it('should create full .erpbackup with manifest/checksum and require password for encrypted backups', () => {
+    const adminLogin = AuthRepository.login('admin', 'admin123');
+    const full = BackupRepository.createFull({
+      actorId: adminLogin.user!.id,
+      notes: 'Professional full backup test',
+      password: 'secure123',
+      storeName: 'Test Store',
+      appVersion: '1.0.0'
+    }) as any;
+    expect(full.success).toBe(true);
+    expect(String(full.file_path).endsWith('.erpbackup')).toBe(true);
+
+    const noPass = BackupRepository.validateFile(full.file_path);
+    expect(noPass.requiresPassword).toBe(true);
+
+    const withPass = BackupRepository.validateFile(full.file_path, 'secure123');
+    expect(withPass.valid).toBe(true);
+    expect(withPass.manifest).toBeDefined();
+    expect(withPass.manifest?.checksum_sha256).toBeDefined();
+  });
+
+  it('should reject tampered .erpbackup files', () => {
+    const adminLogin = AuthRepository.login('admin', 'admin123');
+    const full = BackupRepository.createFull({
+      actorId: adminLogin.user!.id,
+      notes: 'Tamper test',
+      storeName: 'Test Store',
+      appVersion: '1.0.0'
+    }) as any;
+
+    const raw = fs.readFileSync(full.file_path, 'utf-8');
+    const tampered = raw.replace('ERPBACKUP_V1', 'ERPBACKUP_TAMPERED');
+    fs.writeFileSync(full.file_path, tampered);
+
+    const result = BackupRepository.validateFile(full.file_path);
+    expect(result.valid).toBe(false);
   });
 
   it('should manage branches, branch access, branch-filtered reports, and class assignments', () => {
@@ -1980,6 +2167,8 @@ describe('SQLite Database Repositories Integration Tests', () => {
       });
       expect(first.success).toBe(true);
       expect(first.shift?.status).toBe('OPEN');
+      const activeShift = first.shift;
+      expect(activeShift).toBeDefined();
 
       const second = CashierShiftRepository.openShift({
         user_id: 'U001',
@@ -2001,7 +2190,7 @@ describe('SQLite Database Repositories Integration Tests', () => {
         cashier_name: 'Kashif Ali',
         branch_id: 'B001',
         branch_name: 'Main Branch',
-        shift_id: first.shift.id,
+        shift_id: activeShift!.id,
         register_id: 'REG-B001',
         payment_method: 'Cash',
         date: '2026-05-22',
@@ -2027,6 +2216,44 @@ describe('SQLite Database Repositories Integration Tests', () => {
       expect(closed.success).toBe(true);
       expect(closed.closing_status).toBe('OVER');
       expect(Number(closed.difference)).toBe(100);
+    });
+
+    it('should support suspend/resume and force close with audit trail', () => {
+      const opened = CashierShiftRepository.openShift({
+        user_id: 'U001',
+        cashier_name: 'Kashif Ali',
+        branch_id: 'B001',
+        register_id: 'REG-B001',
+        opening_cash: 1500
+      });
+      const shift = opened.shift as any;
+      expect(shift.status).toBe('OPEN');
+
+      expect(CashierShiftRepository.suspendShift(shift.id, 'U001', 'Kashif Ali', 'Lunch break')).toBe(true);
+      const suspended = CashierShiftRepository.getActiveShift('U001', 'B001', 'REG-B001') as any;
+      expect(suspended.status).toBe('SUSPENDED');
+
+      expect(CashierShiftRepository.resumeShift(shift.id, 'U001', 'Kashif Ali', 'Back to counter')).toBe(true);
+      const resumed = CashierShiftRepository.getActiveShift('U001', 'B001', 'REG-B001') as any;
+      expect(resumed.status).toBe('OPEN');
+
+      const forced = CashierShiftRepository.forceCloseShift({
+        shift_id: shift.id,
+        actor_user_id: 'U001',
+        actor_name: 'Kashif Ali',
+        counted_cash: 1400,
+        notes: 'Register left unattended'
+      });
+      expect(forced.success).toBe(true);
+      expect(forced.forced).toBe(true);
+
+      const db = getDatabase();
+      const row = db.prepare('SELECT status, counted_cash FROM cashier_shifts WHERE id=?').get(shift.id) as any;
+      expect(row.status).toBe('FORCE_CLOSED');
+      expect(Number(row.counted_cash)).toBe(1400);
+
+      const audit = db.prepare("SELECT action FROM audit_logs WHERE action='SHIFT_FORCE_CLOSE' AND details LIKE ?").all(`%${shift.id}%`) as any[];
+      expect(audit.length).toBeGreaterThan(0);
     });
 
     it('should allow walk-in cash sale and persist cashier/branch metadata', () => {
@@ -2066,6 +2293,8 @@ describe('SQLite Database Repositories Integration Tests', () => {
       expect(row.branch_name).toBe('Main Branch');
       expect(row.shift_id).toBe(shift.id);
       expect(row.register_id).toBe('REG-B001');
+      const walkInCustomerProfile = CustomerRepository.getByName('Walk-in Customer');
+      expect(walkInCustomerProfile).toBeUndefined();
     });
 
     it('should enforce registered customer for khata/credit sale', () => {
@@ -2081,6 +2310,28 @@ describe('SQLite Database Repositories Integration Tests', () => {
         tax_rate: 0,
         items: [{ product_id: 'P001', quantity: 1, price: 100 }]
       })).toThrow('Credit/khata sale requires a registered customer.');
+    });
+
+    it('should block inactive customer for new khata/credit sale', () => {
+      const customerName = `TEST-INACTIVE-KHATA-${Date.now()}`;
+      expect(CustomerRepository.create({
+        name: customerName,
+        phone: '03004445555',
+        status: 'inactive'
+      })).toBe(true);
+
+      expect(() => SaleRepository.create({
+        invoiceNo: `TEST-INACTIVE-CREDIT-${Date.now()}`,
+        customerName,
+        customer_id: customerName,
+        customer_type: 'REGISTERED',
+        date: '2026-05-22',
+        total: 100,
+        status: 'Credit',
+        discount: 0,
+        tax_rate: 0,
+        items: [{ product_id: 'P001', quantity: 1, price: 100 }]
+      })).toThrow('Inactive customer cannot be used for new khata sale.');
     });
 
     it('should return recent sales ordered latest first', () => {
@@ -2398,7 +2649,11 @@ describe('SQLite Database Repositories Integration Tests', () => {
       expect(cashierUser.success).toBe(true);
       const cashierLogin = AuthRepository.login(cashierUsername, 'khata123');
       expect(AuthRepository.hasPermission(cashierLogin.token, 'khata.view')).toBe(true);
+      expect(AuthRepository.hasPermission(cashierLogin.token, 'khata.statement')).toBe(true);
       expect(AuthRepository.hasPermission(cashierLogin.token, 'khata.adjust')).toBe(false);
+      expect(AuthRepository.hasPermission(cashierLogin.token, 'customers.view')).toBe(true);
+      expect(AuthRepository.hasPermission(cashierLogin.token, 'customers.create')).toBe(true);
+      expect(AuthRepository.hasPermission(cashierLogin.token, 'customers.deactivate')).toBe(false);
 
       const managerUsername = `khata_manager_${Date.now()}`;
       const managerUser = UserRepository.create({
@@ -2411,7 +2666,29 @@ describe('SQLite Database Repositories Integration Tests', () => {
       expect(managerUser.success).toBe(true);
       const managerLogin = AuthRepository.login(managerUsername, 'khata123');
       expect(AuthRepository.hasPermission(managerLogin.token, 'khata.view')).toBe(true);
+      expect(AuthRepository.hasPermission(managerLogin.token, 'khata.statement')).toBe(true);
       expect(AuthRepository.hasPermission(managerLogin.token, 'khata.payment')).toBe(true);
+      expect(AuthRepository.hasPermission(managerLogin.token, 'customers.view')).toBe(true);
+      expect(AuthRepository.hasPermission(managerLogin.token, 'customers.create')).toBe(true);
+      expect(AuthRepository.hasPermission(managerLogin.token, 'customers.edit')).toBe(true);
+      expect(AuthRepository.hasPermission(managerLogin.token, 'customers.deactivate')).toBe(true);
+    });
+
+    it('should provide credit limit warning rows for over-limit customers', () => {
+      const customerName = `TEST-KHATA-LIMIT-${Date.now()}`;
+      expect(CustomerRepository.create({
+        name: customerName,
+        phone: '03007777777',
+        opening_balance: 0,
+        credit: 12500,
+        credit_limit: 10000,
+        due_days: 30,
+        status: 'active'
+      })).toBe(true);
+      const warnings = CustomerRepository.getCreditLimitWarnings() as any[];
+      const row = warnings.find((w) => w.customer_name === customerName);
+      expect(row).toBeTruthy();
+      expect(Number(row.exceeded_by || 0)).toBeGreaterThan(0);
     });
 
     it('should include cashier, branch, and customer in receipt payload html', () => {
@@ -2433,6 +2710,20 @@ describe('SQLite Database Repositories Integration Tests', () => {
       expect(html).toContain('Kashif Ali');
       expect(html).toContain('Main Branch');
       expect(html).toContain('Walk-in Customer');
+    });
+
+    it('should generate customer statement preview html with running balance data', () => {
+      const html = ReceiptService.generateCustomerStatementHtml({
+        customer: { name: 'TEST-KHATA-CUSTOMER', branch_id: 'B001' },
+        summary: { opening_balance: 500, outstanding_balance: 350 },
+        entries: [
+          { date: '2026-05-22', type: 'OPENING', debit: 500, credit: 0, balance: 500 },
+          { date: '2026-05-23', type: 'KHATA_PAYMENT', debit: 0, credit: 150, balance: 350 }
+        ]
+      }, ReceiptService.getSettings());
+      expect(html).toContain('Customer Statement (Preview)');
+      expect(html).toContain('TEST-KHATA-CUSTOMER');
+      expect(html).toContain('350.00');
     });
 
     it('should not use alert/confirm in renderer code', () => {

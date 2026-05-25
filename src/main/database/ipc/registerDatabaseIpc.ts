@@ -34,13 +34,16 @@ import { registerDiscountHandlers } from './discount.handlers';
 import { registerNotificationHandlers } from './notification.handlers';
 import { registerKhataHandlers } from './khata.handlers';
 import { registerCashierShiftHandlers } from './cashierShift.handlers';
+import { registerDashboardHandlers } from './dashboard.handlers';
 
 export function registerDatabaseIpc() {
   console.log('[IPC Registration] Activating secure SQLite database channels...');
   registerAuthHandlers();
   registerProductHandlers();
   registerCustomerHandlers();
+  console.log('[IPC Registration] Registering sale handlers...');
   registerSaleHandlers();
+  console.log('[IPC Registration] Sales handlers registered: sales:getReceiptDetail, sales:void, sales:getAuditTrail');
   registerExpenseHandlers();
   registerSettingsHandlers();
   registerSystemHandlers();
@@ -73,5 +76,6 @@ export function registerDatabaseIpc() {
   registerNotificationHandlers();
   registerKhataHandlers();
   registerCashierShiftHandlers();
+  registerDashboardHandlers();
   console.log('[IPC Registration] Secure database channel binding completed successfully.');
 }

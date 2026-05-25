@@ -68,20 +68,26 @@ contextBridge.exposeInMainWorld('api', {
   },
   
   customers: {
-    getAll: () => ipcRenderer.invoke('customers:getAll'),
-    create: (payload: unknown) => ipcRenderer.invoke('customers:create', payload),
-    update: (payload: unknown) => ipcRenderer.invoke('customers:update', payload),
-    deactivate: (name: string) => ipcRenderer.invoke('customers:deactivate', name),
-    getByName: (name: string) => ipcRenderer.invoke('customers:getByName', name),
-    getById: (id: string) => ipcRenderer.invoke('customers:getById', id),
-    getStatement: (id: string) => ipcRenderer.invoke('customers:getStatement', id),
-    getSales: (id: string) => ipcRenderer.invoke('customers:getSales', id),
-    getInvoices: (id: string) => ipcRenderer.invoke('customers:getInvoices', id),
-    getPayments: (id: string) => ipcRenderer.invoke('customers:getPayments', id),
-    createOrIncrementCredit: (name: string, creditChange: number, purchasesChange: number, date: string) => 
-      ipcRenderer.invoke('customers:createOrIncrementCredit', name, creditChange, purchasesChange, date),
-    receivePayment: (name: string, payAmt: number, date: string) => 
-      ipcRenderer.invoke('customers:receivePayment', name, payAmt, date),
+    getAll: (filters?: any) => ipcRenderer.invoke('customers:getAll', sessionToken, filters || {}),
+    create: (payload: unknown) => ipcRenderer.invoke('customers:create', sessionToken, payload),
+    update: (payload: unknown) => ipcRenderer.invoke('customers:update', sessionToken, payload),
+    deactivate: (name: string) => ipcRenderer.invoke('customers:deactivate', sessionToken, name),
+    reactivate: (name: string) => ipcRenderer.invoke('customers:reactivate', sessionToken, name),
+    getByName: (name: string) => ipcRenderer.invoke('customers:getByName', sessionToken, name),
+    getById: (id: string) => ipcRenderer.invoke('customers:getById', sessionToken, id),
+    getByPhone: (phone: string) => ipcRenderer.invoke('customers:getByPhone', sessionToken, phone),
+    getStatement: (id: string) => ipcRenderer.invoke('customers:getStatement', sessionToken, id),
+    getSales: (id: string) => ipcRenderer.invoke('customers:getSales', sessionToken, id),
+    getInvoices: (id: string) => ipcRenderer.invoke('customers:getInvoices', sessionToken, id),
+    getPayments: (id: string) => ipcRenderer.invoke('customers:getPayments', sessionToken, id),
+    getReturns: (id: string) => ipcRenderer.invoke('customers:getReturns', sessionToken, id),
+    getAging: (asOfDate: string) => ipcRenderer.invoke('customers:getAging', sessionToken, asOfDate),
+    getOverdue: (asOfDate: string) => ipcRenderer.invoke('customers:getOverdue', sessionToken, asOfDate),
+    getCreditLimitWarnings: () => ipcRenderer.invoke('customers:getCreditLimitWarnings', sessionToken),
+    createOrIncrementCredit: (name: string, creditChange: number, purchasesChange: number, date: string) =>
+      ipcRenderer.invoke('customers:createOrIncrementCredit', sessionToken, name, creditChange, purchasesChange, date),
+    receivePayment: (name: string, payAmt: number, date: string) =>
+      ipcRenderer.invoke('customers:receivePayment', sessionToken, name, payAmt, date),
   },
   
   sales: {
@@ -138,7 +144,24 @@ contextBridge.exposeInMainWorld('api', {
     getShiftSummary: (shiftId: string) => ipcRenderer.invoke('cashierShifts:getShiftSummary', sessionToken, shiftId),
     closeShift: (payload: { shift_id: string; counted_cash: number; notes?: string }) =>
       ipcRenderer.invoke('cashierShifts:closeShift', sessionToken, payload),
+    forceCloseShift: (payload: { shift_id: string; counted_cash?: number; notes?: string }) =>
+      ipcRenderer.invoke('cashierShifts:forceCloseShift', sessionToken, payload),
+    suspendShift: (shiftId: string, notes?: string) => ipcRenderer.invoke('cashierShifts:suspendShift', sessionToken, shiftId, notes),
+    resumeShift: (shiftId: string, notes?: string) => ipcRenderer.invoke('cashierShifts:resumeShift', sessionToken, shiftId, notes),
     getOpenShifts: () => ipcRenderer.invoke('cashierShifts:getOpenShifts', sessionToken),
+  },
+
+  dashboard: {
+    getOverview: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getOverview', sessionToken, filters),
+    getSalesTrend: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getSalesTrend', sessionToken, filters),
+    getPaymentBreakdown: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getPaymentBreakdown', sessionToken, filters),
+    getTopProducts: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getTopProducts', sessionToken, filters),
+    getRecentActivity: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getRecentActivity', sessionToken, filters),
+    getShiftSummary: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getShiftSummary', sessionToken, filters),
+    getLowStock: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getLowStock', sessionToken, filters),
+    getReceivablesPayables: (filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getReceivablesPayables', sessionToken, filters),
+    getDateDetail: (date: string, filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getDateDetail', sessionToken, date, filters),
+    getMetricDetail: (metric: string, filters: Record<string, unknown>) => ipcRenderer.invoke('dashboard:getMetricDetail', sessionToken, metric, filters),
   },
   
   expenses: {
@@ -269,6 +292,40 @@ contextBridge.exposeInMainWorld('api', {
     customerBalance: () => ipcRenderer.invoke('reports:customerBalance', sessionToken),
     customerAging: (asOfDate: string) => ipcRenderer.invoke('reports:customerAging', sessionToken, asOfDate),
     paymentCollection: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:paymentCollection', sessionToken, dateFrom, dateTo),
+    shiftSummary: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:shiftSummary', sessionToken, dateFrom, dateTo, branchId),
+    cashierDiscrepancy: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:cashierDiscrepancy', sessionToken, dateFrom, dateTo, branchId),
+    dailySalesSummary: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:dailySalesSummary', sessionToken, dateFrom, dateTo, branchId),
+    productSales: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:productSales', sessionToken, dateFrom, dateTo, branchId),
+    discountSummary: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:discountSummary', sessionToken, dateFrom, dateTo, branchId),
+    returnSummary: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:returnSummary', sessionToken, dateFrom, dateTo, branchId),
+    voidSummary: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:voidSummary', sessionToken, dateFrom, dateTo, branchId),
+    paymentMethod: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:paymentMethod', sessionToken, dateFrom, dateTo, branchId),
+    cashDrawerReconciliation: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:cashDrawerReconciliation', sessionToken, dateFrom, dateTo, branchId),
+    branchPerformance: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:branchPerformance', sessionToken, dateFrom, dateTo),
+    cashierSales: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:cashierSales', sessionToken, dateFrom, dateTo, branchId),
+    hourlySales: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:hourlySales', sessionToken, dateFrom, dateTo, branchId),
+    salesInvoices: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:salesInvoices', sessionToken, dateFrom, dateTo, branchId),
+    purchaseSummary: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:purchaseSummary', sessionToken, dateFrom, dateTo, branchId),
+    purchaseReturns: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:purchaseReturns', sessionToken, dateFrom, dateTo, branchId),
+    stockMovement: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:stockMovement', sessionToken, dateFrom, dateTo, branchId),
+    lowStock: (branchId?: string) => ipcRenderer.invoke('reports:lowStock', sessionToken, branchId),
+    branchStock: (branchId?: string) => ipcRenderer.invoke('reports:branchStock', sessionToken, branchId),
+    inventoryAdjustment: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:inventoryAdjustment', sessionToken, dateFrom, dateTo, branchId),
+    stockTransfer: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:stockTransfer', sessionToken, dateFrom, dateTo),
+    customerStatement: (customerIdOrName: string, dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:customerStatement', sessionToken, customerIdOrName, dateFrom, dateTo),
+    supplierPayable: (dateTo: string) => ipcRenderer.invoke('reports:supplierPayable', sessionToken, dateTo),
+    supplierLedger: (supplierId: string, dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:supplierLedger', sessionToken, supplierId, dateFrom, dateTo),
+    supplierPayment: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:supplierPayment', sessionToken, dateFrom, dateTo, branchId),
+    outputTax: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:outputTax', sessionToken, dateFrom, dateTo),
+    inputTax: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:inputTax', sessionToken, dateFrom, dateTo),
+    bankAccountSummary: () => ipcRenderer.invoke('reports:bankAccountSummary', sessionToken),
+    moneyTransaction: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:moneyTransaction', sessionToken, dateFrom, dateTo, branchId),
+    bankReconciliation: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:bankReconciliation', sessionToken, dateFrom, dateTo),
+    branchProfitAndLoss: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:branchProfitAndLoss', sessionToken, dateFrom, dateTo),
+    auditLog: (dateFrom: string, dateTo: string, userId?: string) => ipcRenderer.invoke('reports:auditLog', sessionToken, dateFrom, dateTo, userId),
+    backupHistory: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:backupHistory', sessionToken, dateFrom, dateTo),
+    notification: (dateFrom: string, dateTo: string, branchId?: string) => ipcRenderer.invoke('reports:notification', sessionToken, dateFrom, dateTo, branchId),
+    userActivity: (dateFrom: string, dateTo: string) => ipcRenderer.invoke('reports:userActivity', sessionToken, dateFrom, dateTo),
   },
 
   budgets: {
@@ -363,6 +420,13 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   backup: {
+    createFull: (options?: any) => ipcRenderer.invoke('backup:createFull', sessionToken, options || {}),
+    validateFile: (filePath: string, password?: string) => ipcRenderer.invoke('backup:validateFile', sessionToken, filePath, password),
+    restoreFile: (payload: { filePath: string; password?: string; adminPassword: string }) => ipcRenderer.invoke('backup:restoreFile', sessionToken, payload),
+    selectBackupFile: () => ipcRenderer.invoke('backup:selectBackupFile', sessionToken),
+    selectBackupDestination: () => ipcRenderer.invoke('backup:selectBackupDestination', sessionToken),
+    openBackupFolder: (folderPath: string) => ipcRenderer.invoke('backup:openBackupFolder', sessionToken, folderPath),
+    getHistory: () => ipcRenderer.invoke('backup:getHistory', sessionToken),
     create: () => ipcRenderer.invoke('backup:create', sessionToken),
     list: () => ipcRenderer.invoke('backup:list', sessionToken),
     restore: (filePath: string) => ipcRenderer.invoke('backup:restore', sessionToken, filePath),
@@ -422,6 +486,7 @@ contextBridge.exposeInMainWorld('api', {
     updateSettings: (settings: any) => ipcRenderer.invoke('receipt:updateSettings', settings),
     printKhataPayment: (payment: any, isDuplicate = false) => ipcRenderer.invoke('receipt:printKhataPayment', payment, isDuplicate),
     previewKhataPayment: (payment: any, isDuplicate = false) => ipcRenderer.invoke('receipt:previewKhataPayment', payment, isDuplicate),
+    previewCustomerStatement: (statement: any) => ipcRenderer.invoke('receipt:previewCustomerStatement', statement),
   },
 
   khata: {

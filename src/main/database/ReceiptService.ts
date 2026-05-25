@@ -416,4 +416,50 @@ export class ReceiptService {
       return { success: true, printedOffline: true };
     }
   }
+
+  static generateCustomerStatementHtml(statement: any, settings: any) {
+    const width = settings.paperSize === '58mm' ? '58mm' : '80mm';
+    const fontSize = settings.fontSize === 'compact' ? '10px' : '12px';
+    const padding = settings.paperSize === '58mm' ? '2mm' : '4mm';
+    const fmt = (num: number) => typeof num === 'number' ? num.toFixed(2) : '0.00';
+    const customerName = statement?.customer?.name || statement?.customer_name || 'Customer';
+    const entries = Array.isArray(statement?.entries) ? statement.entries : [];
+    const entriesHtml = entries.slice(-30).map((entry: any) => `
+      <tr>
+        <td>${entry.date || '-'}</td>
+        <td>${entry.type || '-'}</td>
+        <td style="text-align:right;">${fmt(Number(entry.debit || 0))}</td>
+        <td style="text-align:right;">${fmt(Number(entry.credit || 0))}</td>
+        <td style="text-align:right;">${fmt(Number(entry.balance || 0))}</td>
+      </tr>
+    `).join('');
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"><style>
+        @page { size:auto; margin:0mm; }
+        body { font-family:'Courier New', monospace; width:${width}; margin:0; padding:${padding}; box-sizing:border-box; font-size:${fontSize}; color:#000; }
+        .center { text-align:center; } .right { text-align:right; } .divider { border-top:1px dashed #000; margin:8px 0; }
+        table { width:100%; border-collapse:collapse; } th, td { padding:2px 0; font-size:${fontSize}; border-bottom:1px dotted #ddd; }
+      </style></head>
+      <body>
+        <div class="center">
+          <div style="font-size:16px;font-weight:bold;">${statement?.customer?.branch_id || 'ERP RETAIL OUTLET'}</div>
+          <div>Customer Statement (Preview)</div>
+        </div>
+        <div class="divider"></div>
+        <div><strong>Customer:</strong> ${customerName}</div>
+        <div><strong>As Of:</strong> ${new Date().toISOString().split('T')[0]}</div>
+        <div><strong>Opening:</strong> ${fmt(Number(statement?.summary?.opening_balance || 0))}</div>
+        <div><strong>Closing:</strong> ${fmt(Number(statement?.summary?.outstanding_balance || 0))}</div>
+        <div class="divider"></div>
+        <table>
+          <thead><tr><th style="text-align:left;">Date</th><th style="text-align:left;">Type</th><th class="right">Debit</th><th class="right">Credit</th><th class="right">Bal</th></tr></thead>
+          <tbody>${entriesHtml || '<tr><td colspan="5" class="center">No statement entries</td></tr>'}</tbody>
+        </table>
+        <div class="divider"></div>
+        <div class="center">${settings.footerMessage}</div>
+      </body></html>
+    `;
+  }
 }

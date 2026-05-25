@@ -256,4 +256,55 @@ export class AccountingPostingService {
       ]
     });
   }
+
+  static postKhataPayment(params: {
+    paymentId: string;
+    customerName: string;
+    date: string;
+    amount: number;
+    method: 'Cash' | 'Bank' | 'EasyPaisa' | 'JazzCash' | 'Card' | 'Cheque';
+    branchId?: string;
+  }) {
+    const debitAccount = params.method === 'Bank' ? '1010' : '1000';
+    JournalRepository.createJournal({
+      entry_no: `AUTO-KHATA-PAY-${params.paymentId}`,
+      entry_date: params.date,
+      description: `Khata payment received from ${params.customerName}`,
+      reference_type: 'CUSTOMER_PAYMENT',
+      reference_id: params.paymentId,
+      branch_id: params.branchId || 'B001',
+      lines: [
+        { account_id: getAccountIdByCode(debitAccount), description: 'Cash/Bank received', debit: params.amount, credit: 0 },
+        { account_id: getAccountIdByCode('1100'), description: 'Accounts receivable reduced', debit: 0, credit: params.amount }
+      ]
+    });
+  }
+
+  static postKhataAdjustment(params: {
+    adjustmentId: string;
+    customerName: string;
+    date: string;
+    type: 'DEBIT' | 'CREDIT';
+    amount: number;
+    branchId?: string;
+  }) {
+    const isDebit = params.type === 'DEBIT';
+    JournalRepository.createJournal({
+      entry_no: `AUTO-KHATA-ADJ-${params.adjustmentId}`,
+      entry_date: params.date,
+      description: `Khata adjustment (${params.type}) for ${params.customerName}`,
+      reference_type: 'CUSTOMER_ADJUSTMENT',
+      reference_id: params.adjustmentId,
+      branch_id: params.branchId || 'B001',
+      lines: isDebit
+        ? [
+            { account_id: getAccountIdByCode('1100'), description: 'Accounts receivable increased', debit: params.amount, credit: 0 },
+            { account_id: getAccountIdByCode('4000'), description: 'Adjustment income', debit: 0, credit: params.amount }
+          ]
+        : [
+            { account_id: getAccountIdByCode('6000'), description: 'Adjustment expense/write-off', debit: params.amount, credit: 0 },
+            { account_id: getAccountIdByCode('1100'), description: 'Accounts receivable reduced', debit: 0, credit: params.amount }
+          ]
+    });
+  }
 }

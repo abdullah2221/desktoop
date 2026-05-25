@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle, Clock, FileClock, Play, Save, Square } from 'lucide-react';
 import { useErp } from '../../app/providers/ErpContext';
 import { Employee, Timesheet } from '../../shared/types';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 
 const today = () => new Date().toISOString().split('T')[0];
 
@@ -121,7 +122,7 @@ export const TimeTrackingPage: React.FC = () => {
           </div>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2 text-left">Employee</th><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Time</th><th className="px-3 py-2 text-right">Hours</th><th className="px-3 py-2 text-left">Branch</th><th className="px-3 py-2 text-left">Status</th><th className="px-3 py-2 text-right">Actions</th></tr></thead>
-            <tbody>{timesheets.map((sheet) => <tr key={sheet.id} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-3 py-2 font-bold">{sheet.employee_code} - {sheet.employee_name}</td><td className="px-3 py-2">{sheet.work_date}</td><td className="px-3 py-2">{sheet.clock_in ? new Date(sheet.clock_in).toLocaleTimeString() : '-'} to {sheet.clock_out ? new Date(sheet.clock_out).toLocaleTimeString() : 'Open'}</td><td className="px-3 py-2 text-right font-bold">{Number(sheet.total_hours || 0).toFixed(2)}</td><td className="px-3 py-2">{sheet.branch_name || '-'}</td><td className="px-3 py-2"><Badge value={sheet.approval_status} /></td><td className="px-3 py-2 text-right">{sheet.approval_status !== 'approved' && hasPermission('time.approve') && <button className="font-bold text-emerald-700" onClick={() => approve(sheet.id)}>Approve</button>}</td></tr>)}</tbody>
+            <tbody>{timesheets.map((sheet) => <tr key={sheet.id} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-3 py-2 font-bold">{sheet.employee_code} - {sheet.employee_name}</td><td className="px-3 py-2">{sheet.work_date}</td><td className="px-3 py-2">{sheet.clock_in ? new Date(sheet.clock_in).toLocaleTimeString() : '-'} to {sheet.clock_out ? new Date(sheet.clock_out).toLocaleTimeString() : 'Open'}</td><td className="px-3 py-2 text-right font-bold">{Number(sheet.total_hours || 0).toFixed(2)}</td><td className="px-3 py-2">{sheet.branch_name || '-'}</td><td className="px-3 py-2"><Badge value={sheet.approval_status} /></td><td className="px-3 py-2"><div className="flex items-center justify-end">{sheet.approval_status !== 'approved' && hasPermission('time.approve') && <IconActionButton icon={<CheckCircle className="w-3.5 h-3.5" />} tooltip="Approve Timesheet" variant="success" onClick={() => approve(sheet.id)} />}</div></td></tr>)}</tbody>
           </table>
         </section>
       </div>

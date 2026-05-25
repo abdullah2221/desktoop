@@ -3,7 +3,7 @@ import { useErp } from '../providers/ErpContext';
 import { DashboardPage } from '../../features/dashboard/DashboardPage';
 import { PosPage } from '../../features/pos/PosPage';
 import { InventoryPage } from '../../features/inventory/InventoryPage';
-import { KhataPage } from '../../features/customers/KhataPage';
+import { CustomersPage } from '../../features/customers/CustomersPage';
 import { ExpensesPage } from '../../features/expenses/ExpensesPage';
 import { SettingsPage } from '../../features/settings/SettingsPage';
 import { SuppliersPage } from '../../features/suppliers/SuppliersPage';
@@ -36,7 +36,7 @@ const routePermissions: Record<string, string | string[] | null> = {
   purchases: 'purchase.create',
   purchase_returns: 'returns.view',
   suppliers: 'supplier.edit',
-  customers: 'khata.view',
+  customers: ['customers.view', 'khata.view'],
   sales: ['sales.view.own', 'sales.view.branch', 'sales.view.all', 'pos.sale.create'],
   sales_returns: 'returns.view',
   taxes: 'taxes.manage',
@@ -51,7 +51,7 @@ const routePermissions: Record<string, string | string[] | null> = {
   currency: 'currency.manage',
   users: 'users.manage',
   branches: 'branch.manage',
-  backup: ['backup.manage', 'settings.edit'],
+  backup: ['backup.manage', 'backup.view', 'backup.create', 'backup.restore', 'backup.export', 'backup.import', 'settings.edit'],
   datasync: ['data.import', 'data.export'],
   system: null,
   notifications: 'notifications.view',
@@ -91,7 +91,7 @@ export const AppRoutes: React.FC = () => {
     case 'suppliers':
       return <SuppliersPage />;
     case 'customers':
-      return <KhataPage />;
+      return <CustomersPage />;
     case 'expenses':
       return <ExpensesPage />;
     case 'accounting':

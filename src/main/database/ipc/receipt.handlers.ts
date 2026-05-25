@@ -44,4 +44,9 @@ export function registerReceiptHandlers() {
     const settings = ReceiptService.getSettings();
     return ReceiptService.generateKhataPaymentHtml(payment, settings, isDuplicate);
   });
+
+  ipcMain.handle('receipt:previewCustomerStatement', (_, statement: any) => {
+    const settings = ReceiptService.getSettings();
+    return ReceiptService.generateCustomerStatementHtml(statement, settings);
+  });
 }

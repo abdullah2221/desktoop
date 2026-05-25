@@ -5,6 +5,7 @@ import { logger } from './logger';
 import { getDatabase, getDatabasePath } from './database/connection';
 import { runMigrations } from './database/migrations';
 import { BackupService } from './database/backup';
+import { BackupRepository } from './database/repositories/BackupRepository';
 
 export interface DiagnosticsReport {
   sqliteOk: boolean;
@@ -16,6 +17,7 @@ export interface DiagnosticsReport {
 
 export class AppStartupManager {
   private static isInitialized = false;
+  private static autoBackupTimer: NodeJS.Timeout | null = null;
 
   static async initialize(): Promise<boolean> {
     if (this.isInitialized) return true;
@@ -60,6 +62,10 @@ export class AppStartupManager {
       logger.info('STARTUP', 'Executing database migrations...');
       runMigrations();
       logger.info('STARTUP', 'Database migration phase executed successfully.');
+
+      // Run and schedule automatic backup if enabled
+      this.runAutomaticBackupIfDue('startup');
+      this.startAutomaticBackupScheduler();
 
       this.isInitialized = true;
       return true;
@@ -114,6 +120,30 @@ export class AppStartupManager {
       `Failed to initialize application database:\n${error.message}\n\nThe application will close now. Please check if you have write permissions to your appdata directory.`
     );
     app.exit(1);
+  }
+
+  private static runAutomaticBackupIfDue(trigger: 'startup' | 'interval') {
+    try {
+      const result = BackupRepository.runAutomaticBackupIfDue(trigger);
+      if (result.ran) {
+        logger.info('STARTUP', `[Auto Backup] Completed (${trigger}).`);
+      } else if (result.reason === 'not_due') {
+        logger.info('STARTUP', `[Auto Backup] Skipped: not due yet.`);
+      } else if (result.reason === 'automatic_backup_disabled') {
+        logger.info('STARTUP', '[Auto Backup] Disabled by settings.');
+      }
+    } catch (error) {
+      logger.error('STARTUP', `[Auto Backup] Failed (${trigger}).`, error);
+    }
+  }
+
+  private static startAutomaticBackupScheduler() {
+    if (this.autoBackupTimer) return;
+    const tickEveryMs = 15 * 60 * 1000; // lightweight due-check every 15 minutes
+    this.autoBackupTimer = setInterval(() => {
+      this.runAutomaticBackupIfDue('interval');
+    }, tickEveryMs);
+    logger.info('STARTUP', `[Auto Backup] Scheduler started (tick ${tickEveryMs / 60000} minutes).`);
   }
 
   static getEnvironmentMode(): 'development' | 'staging' | 'production' {

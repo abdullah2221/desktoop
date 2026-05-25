@@ -48,7 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, permission: null },
     { id: 'pos', label: 'POS / Billing', icon: CreditCard, badge: 'Active', permission: 'pos.sale.create' },
     { id: 'sales', label: 'Sales / Receipts', icon: FileText, permission: ['sales.view.own', 'sales.view.branch', 'sales.view.all', 'pos.sale.create'] },
-    { id: 'customers', label: 'Customers / Khata', icon: Users, permission: 'khata.view' },
+    { id: 'customers', label: 'Customers / Khata', icon: Users, permission: ['customers.view', 'khata.view'] },
     { id: 'inventory', label: 'Products / Inventory', icon: Layers, permission: 'inventory.product.edit' },
     { id: 'warehouse', label: 'Warehouse / Stock', icon: Warehouse, permission: ['inventory.view.branch', 'inventory.transfer', 'inventory.adjust'] },
     { id: 'purchases', label: 'Purchases / Suppliers', icon: ShoppingBag, permission: 'purchase.create' },
@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'automation', label: 'Automation', icon: Repeat, permission: 'automation.manage' },
     { id: 'settings', label: 'Settings', icon: Settings, permission: 'settings.edit' },
     { id: 'users', label: 'Users & Roles', icon: Settings, permission: 'users.manage' },
-    { id: 'backup', label: 'Backup & Restore', icon: Database, permission: ['backup.manage', 'settings.edit'] },
+    { id: 'backup', label: 'Backup & Restore', icon: Database, permission: ['backup.manage', 'backup.view', 'backup.create', 'backup.restore', 'backup.export', 'backup.import', 'settings.edit'] },
     { id: 'system', label: 'System Health', icon: Activity, permission: null },
 
     // Secondary modules retained for completeness, kept below primary workflow
@@ -80,8 +80,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   });
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm">
-      <div>
+    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm h-screen">
+      <div className="flex flex-col min-h-0 flex-1">
         {/* Logo Section */}
         <div className="p-5 border-b border-slate-200 flex items-center gap-3 bg-slate-50">
           <div className="p-2 bg-primary-blue text-white rounded-[4px]">
@@ -94,35 +94,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Nav Items */}
-        <nav className="p-3 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onTabChange(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-[4px] text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                  isActive 
-                    ? 'bg-primary-blue text-white shadow-sm' 
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                </div>
-                {item.badge && (
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-[2px] ${
-                    isActive ? 'bg-[#015481] text-white' : 'bg-primary-light text-primary-blue'
-                  }`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-3">
+          <nav className="space-y-1 pr-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onTabChange(item.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-[4px] text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                    isActive
+                      ? 'bg-primary-blue text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-[2px] ${
+                      isActive ? 'bg-[#015481] text-white' : 'bg-primary-light text-primary-blue'
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
       </div>
 
       {/* Local Environment Chip */}

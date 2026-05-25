@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 import { Input } from '../../shared/ui/Input';
 import { useErp } from '../../app/providers/ErpContext';
 
@@ -60,7 +62,7 @@ export const RolesPage: React.FC = () => {
                 <td className="font-bold">{role.name}</td>
                 <td>{role.description}</td>
                 <td><div className="flex flex-wrap gap-1">{role.permissions.map((p) => <Badge key={p.id} variant="info">{p.name}</Badge>)}</div></td>
-                <td><Button size="sm" variant="secondary" onClick={() => edit(role)}>Edit</Button></td>
+                <td><IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit Role" onClick={() => edit(role)} /></td>
               </tr>
             ))}
           </tbody>

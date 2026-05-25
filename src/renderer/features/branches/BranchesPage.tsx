@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, CheckCircle, MapPin, Plus, RefreshCw, Save } from 'lucide-react';
+import { Building2, CheckCircle, MapPin, Pencil, Plus, Power, RefreshCw, Save, ToggleLeft, Star } from 'lucide-react';
 import type { Branch } from '../../shared/types';
 import { ClassesPage } from './ClassesPage';
 import { useErp } from '../../app/providers/ErpContext';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 
 const emptyBranch: Partial<Branch> = {
   branch_code: '',
@@ -233,12 +234,14 @@ export const BranchesPage: React.FC = () => {
                       <td className="px-4 py-2">
                         <span className={`px-2 py-1 rounded-[3px] text-[10px] font-bold uppercase ${row.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{row.status}</span>
                       </td>
-                      <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
-                        {row.id !== activeBranchId && row.status === 'active' && <button className="text-emerald-700 font-bold" onClick={() => switchBranch(row.id)}>Switch</button>}
-                        {!row.is_default && row.status === 'active' && <button className="text-amber-700 font-bold" onClick={() => makeDefault(row.id)}>Default</button>}
-                        <button className="text-primary-blue font-bold" onClick={() => editBranch(row)}>Edit</button>
-                        {!row.is_default && row.status === 'active' && <button className="text-red-600 font-bold" onClick={() => deactivateBranch(row.id)}>Deactivate</button>}
-                        {row.id === activeBranchId && <CheckCircle className="inline w-4 h-4 text-emerald-600" />}
+                      <td className="px-4 py-2 whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          {row.id !== activeBranchId && row.status === 'active' && <IconActionButton icon={<ToggleLeft className="w-3.5 h-3.5" />} tooltip="Switch Branch" variant="success" onClick={() => switchBranch(row.id)} />}
+                          {!row.is_default && row.status === 'active' && <IconActionButton icon={<Star className="w-3.5 h-3.5" />} tooltip="Set Default Branch" onClick={() => makeDefault(row.id)} />}
+                          <IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit Branch" onClick={() => editBranch(row)} />
+                          {!row.is_default && row.status === 'active' && <IconActionButton icon={<Power className="w-3.5 h-3.5" />} tooltip="Deactivate Branch" danger onClick={() => deactivateBranch(row.id)} />}
+                          {row.id === activeBranchId && <CheckCircle className="inline w-4 h-4 text-emerald-600" />}
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -1,245 +1,199 @@
 import React from 'react';
+import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { useErp } from '../../app/providers/ErpContext';
-import { Badge } from '../../shared/ui/Badge';
-import { Table, TableColumn } from '../../shared/ui/Table';
-import { Sale, Product } from '../../shared/types';
-import { 
-  BarChart3, 
-  Receipt, 
-  AlertTriangle, 
-  TrendingUp, 
-  Users, 
-  Coins, 
-  CheckCircle,
-  Database
-} from 'lucide-react';
+import { Card } from '../../shared/ui/Card';
+import { Button } from '../../shared/ui/Button';
+import { DashboardDateDetailDrawer } from './DashboardDateDetailDrawer';
+import { DashboardFilter, DashboardMetricDetail, DashboardOverview } from '../../shared/types';
+
+const money = (v: number) => `Rs. ${Number(v || 0).toLocaleString()}`;
+const COLORS = ['#005f8f', '#22c55e', '#f59e0b', '#e11d48', '#8b5cf6', '#14b8a6', '#64748b'];
 
 export const DashboardPage: React.FC = () => {
-  const { 
-    sales, 
-    products, 
-    expenses, 
-    customers, 
-    setActiveTab 
-  } = useErp();
-
-  const [recentInvoices, setRecentInvoices] = React.useState<any[]>([]);
-  const [invoiceSalesToday, setInvoiceSalesToday] = React.useState(0);
+  const { accessibleBranches, activeBranchId, activeUser } = useErp();
+  const [dateFrom, setDateFrom] = React.useState(new Date(new Date().setDate(new Date().getDate() - 6)).toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = React.useState(new Date().toISOString().slice(0, 10));
+  const [branchId, setBranchId] = React.useState(activeBranchId || '');
+  const [cashierId, setCashierId] = React.useState('');
+  const [registerId, setRegisterId] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [overview, setOverview] = React.useState<DashboardOverview | null>(null);
+  const [trend, setTrend] = React.useState<any[]>([]);
+  const [payment, setPayment] = React.useState<any[]>([]);
+  const [topProducts, setTopProducts] = React.useState<any[]>([]);
+  const [shifts, setShifts] = React.useState<any[]>([]);
+  const [recent, setRecent] = React.useState<any[]>([]);
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailData, setDetailData] = React.useState<DashboardMetricDetail | null>(null);
 
   React.useEffect(() => {
-    const load = async () => {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const invoices = await window.api.invoices.getRecent({ date_from: today, date_to: today, limit: 20 });
-        setRecentInvoices(invoices || []);
-        setInvoiceSalesToday((invoices || []).reduce((sum: number, row: any) => sum + Number(row.grand_total || 0), 0));
-      } catch {
-        setRecentInvoices([]);
-        setInvoiceSalesToday(0);
-      }
-    };
-    load();
-  }, [sales.length]);
+    setBranchId(activeBranchId || '');
+  }, [activeBranchId]);
 
-  // Calculated Metrics
-  const lowStockProducts = products.filter(p => (p.stock_quantity ?? 0) <= (p.minimum_stock ?? 0));
-  const lowStockCount = lowStockProducts.length;
-  const totalOutstandingCredit = customers.reduce((sum, c) => sum + c.credit, 0);
-  const todaySalesSum = sales
-    .filter(s => s.date === new Date().toISOString().split('T')[0])
-    .reduce((sum, s) => sum + s.total, 0);
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const filters: DashboardFilter = {
+    date_from: dateFrom,
+    date_to: dateTo,
+    branch_id: branchId || undefined,
+    cashier_id: cashierId || undefined,
+    register_id: registerId || undefined
+  };
 
-  // Table Columns config for Transactions
-  const transactionColumns: TableColumn<Sale>[] = [
-    {
-      header: 'Invoice #',
-      accessor: (sale) => <span className="font-mono font-bold text-primary-blue">{sale.invoiceNo}</span>
-    },
-    {
-      header: 'Customer',
-      accessor: (sale) => <span>{sale.customerName}</span>
-    },
-    {
-      header: 'Cashier / Branch',
-      accessor: (sale) => <span className="text-xs">{sale.cashier_name || '-'} • {sale.branch_name || sale.branch_id || '-'}</span>
-    },
-    {
-      header: 'Date',
-      accessor: (sale) => <span>{sale.date}</span>
-    },
-    {
-      header: 'Total Amount',
-      accessor: (sale) => <span className="font-bold">Rs. {sale.total.toLocaleString()}</span>
-    },
-    {
-      header: 'Status',
-      accessor: (sale) => (
-        <Badge variant={sale.status === 'Paid' ? 'success' : 'warning'}>
-          {sale.status}
-        </Badge>
-      )
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [o, s, p, t, a, sh] = await Promise.all([
+        window.api.dashboard.getOverview(filters),
+        window.api.dashboard.getSalesTrend(filters),
+        window.api.dashboard.getPaymentBreakdown(filters),
+        window.api.dashboard.getTopProducts(filters),
+        window.api.dashboard.getRecentActivity(filters),
+        window.api.dashboard.getShiftSummary(filters)
+      ]);
+      setOverview(o);
+      setTrend(s.rows || []);
+      setPayment(p.rows || []);
+      setTopProducts(t.rows || []);
+      setRecent(a.rows || []);
+      setShifts(sh.rows || []);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  React.useEffect(() => {
+    load();
+  }, [dateFrom, dateTo, branchId]);
+
+  const openMetricDetail = async (metric: string) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    try {
+      const data = await window.api.dashboard.getMetricDetail(metric, filters);
+      setDetailData(data);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const metrics = overview?.metrics || {};
+  const cards = [
+    { key: 'today_pos_sales', label: 'Today POS Sales', metric: 'pos_sales' },
+    { key: 'today_invoice_sales', label: 'Today Invoice Sales', metric: 'invoice_sales' },
+    { key: 'total_collections', label: 'Total Collections', metric: 'invoice_sales' },
+    { key: 'cash_in_hand', label: 'Cash in Hand', metric: 'cash_in_hand' },
+    { key: 'khata_outstanding', label: 'Khata Outstanding', metric: 'khata_due' },
+    { key: 'supplier_payables', label: 'Supplier Payables', metric: 'khata_due' },
+    { key: 'today_expenses', label: 'Today Expenses', metric: 'expenses' },
+    { key: 'gross_profit_estimate', label: 'Gross Profit Est.', metric: 'top_products' },
+    { key: 'net_profit_estimate', label: 'Net Profit Est.', metric: 'top_products' },
+    { key: 'total_returns', label: 'Returns', metric: 'returns' },
+    { key: 'total_discounts', label: 'Discounts', metric: 'discounts' },
+    { key: 'low_stock_items', label: 'Low Stock Items', metric: 'low_stock' },
+    { key: 'open_shifts', label: 'Open Shifts', metric: 'open_shifts' },
+    { key: 'cash_short_over', label: 'Cash Short/Over', metric: 'cash_in_hand' },
+    { key: 'pending_invoices', label: 'Pending Invoices', metric: 'invoice_sales' },
+    { key: 'overdue_customers', label: 'Overdue Customers', metric: 'khata_due' }
+  ] as const;
 
   return (
-    <div className="space-y-6">
-      
-      {/* Welcome Alert */}
-      <div className="p-4 rounded-[8px] bg-white border border-slate-200 shadow-sm flex items-start gap-4">
-        <div className="p-2 bg-success-light rounded-[4px] text-success-green shrink-0">
-          <CheckCircle className="w-5 h-5" />
+    <div className="space-y-4">
+      <Card title="Dashboard Filters">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+          <div><label className="text-[10px] font-bold uppercase text-slate-500">From</label><input className="erp-input" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div>
+          <div><label className="text-[10px] font-bold uppercase text-slate-500">To</label><input className="erp-input" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div>
+          <div>
+            <label className="text-[10px] font-bold uppercase text-slate-500">Branch</label>
+            <select className="erp-input" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+              <option value="">All Branches</option>
+              {accessibleBranches.map((b) => <option key={b.id} value={b.id}>{b.branch_code} - {b.branch_name}</option>)}
+            </select>
+          </div>
+          <div><label className="text-[10px] font-bold uppercase text-slate-500">Cashier</label><input className="erp-input" value={cashierId} onChange={(e) => setCashierId(e.target.value)} placeholder="Cashier ID" /></div>
+          <div><label className="text-[10px] font-bold uppercase text-slate-500">Register</label><input className="erp-input" value={registerId} onChange={(e) => setRegisterId(e.target.value)} placeholder="Register ID" /></div>
+          <div className="flex items-end"><Button onClick={load} disabled={loading}>Refresh</Button></div>
         </div>
-        <div className="space-y-1">
-          <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Secure Context Bridge Verified</h2>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            The Electron wrapper main-process is successfully communicating with this React UI process. Environment details, system state, and active SQLite config checks are loaded. Ready to perform local offline operations.
-          </p>
-        </div>
-      </div>
+      </Card>
 
-      {/* Quick Metrics Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {[
-          { label: "Today's POS Sales", value: `Rs. ${todaySalesSum.toLocaleString()}`, change: "Counter receipts", border: "border-l-4 border-l-primary-blue", icon: TrendingUp },
-          { label: "Today's Invoice Sales", value: `Rs. ${invoiceSalesToday.toLocaleString()}`, change: "Formal invoices", border: "border-l-4 border-l-indigo-500", icon: Receipt },
-          { label: "Low Stock Items", value: `${lowStockCount} Products`, change: "Requires reorder alert", border: "border-l-4 border-l-warning-amber", icon: AlertTriangle },
-          { label: "Udhaar (Outstanding Credit)", value: `Rs. ${totalOutstandingCredit.toLocaleString()}`, change: "Tracked customer ledgers", border: "border-l-4 border-l-emerald-600", icon: Users },
-          { label: "Current Expense Log", value: `Rs. ${totalExpenses.toLocaleString()}`, change: "Utilities and Sundry logged", border: "border-l-4 border-l-slate-400", icon: Coins }
-        ].map((card, i) => {
-          const Icon = card.icon;
-          return (
-            <div key={i} className={`p-4 bg-white rounded-[8px] border border-slate-200 flex items-center justify-between shadow-sm ${card.border}`}>
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">{card.label}</span>
-                <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">{card.value}</h3>
-                <span className="text-[10px] text-slate-400 block">{card.change}</span>
-              </div>
-              <div className="p-2 bg-slate-50 border border-slate-100 rounded-[4px] text-slate-400 shrink-0">
-                <Icon className="w-4 h-4" />
-              </div>
-            </div>
-          );
-        })}
+      <section className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {cards.map((c) => (
+          <button key={c.key} onClick={() => openMetricDetail(c.metric)} className="text-left bg-white border border-slate-200 rounded-[6px] p-3 hover:border-primary-blue">
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">{c.label}</div>
+            <div className="text-sm font-extrabold text-slate-800 mt-1">{money(metrics[c.key] || 0)}</div>
+          </button>
+        ))}
       </section>
 
-      {/* Main Dashboard Layout split */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Side: Recent Store Transactions */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-primary-blue" />
-                <span>Recent Store Transactions</span>
-              </h3>
-              <button 
-                onClick={() => setActiveTab('pos')}
-                className="px-2.5 py-1 text-[10px] font-bold bg-primary-light text-primary-blue border border-primary-blue/20 rounded-[4px] hover:bg-primary-blue hover:text-white transition-colors cursor-pointer"
-              >
-                New Invoice
-              </button>
-            </div>
-            
-            <Table
-              columns={transactionColumns}
-              data={sales.slice(0, 10)}
-              keyExtractor={(sale) => sale.invoiceNo}
-              emptyMessage="No store transactions completed yet."
-            />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card title="Sales Trend">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="bucket" />
+                <YAxis />
+                <Tooltip />
+                <Line type="monotone" dataKey="sales" stroke="#005f8f" strokeWidth={2} />
+                <Line type="monotone" dataKey="transactions" stroke="#22c55e" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
+        </Card>
 
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Recent Invoices</h3>
-            <table className="erp-table">
-              <thead><tr><th>Invoice</th><th>Customer</th><th>Status</th><th>Total</th></tr></thead>
-              <tbody>
-                {recentInvoices.slice(0, 6).map((row: any) => (
-                  <tr key={row.id}>
-                    <td>{row.invoice_no}</td>
-                    <td>{row.customer_name || 'Walk-in Customer'}</td>
-                    <td>{row.status}</td>
-                    <td>Rs. {Number(row.grand_total || 0).toLocaleString()}</td>
-                  </tr>
-                ))}
-                {recentInvoices.length === 0 && (
-                  <tr><td colSpan={4} className="text-center text-xs text-slate-500 py-4">No recent formal invoices.</td></tr>
-                )}
-              </tbody>
-            </table>
+        <Card title="Payment Breakdown">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={payment} dataKey="amount" nameKey="payment_method" outerRadius={85}>
+                  {payment.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
+        </Card>
 
-          {/* Database Setup Check Card */}
-          <div className="bg-white p-5 rounded-[8px] border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-primary-blue" />
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Offline SQLite Architecture (Step 2 Preview)</h3>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed font-medium">
-              The ERP desktop application uses React on the frontend and will execute secure IPC queries to a local SQLite database file in the user's workspace. All inventories, transactions, credits, and ledger updates remain strictly local, private, and fully operational without requiring internet connectivity.
-            </p>
+        <Card title="Top Products">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topProducts.slice(0, 8)}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="product_name" hide />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="revenue" fill="#005f8f" />
+                <Bar dataKey="profit" fill="#22c55e" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        </div>
-
-        {/* Right Side: Stock Watchlist & Quick Actions */}
-        <div className="space-y-6">
-          
-          {/* Low Stock Watchlist */}
-          <div className="bg-white rounded-[8px] border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-200 bg-slate-50">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-warning-amber" />
-                <span>Low Stock Watchlist</span>
-              </h3>
-            </div>
-            <div className="p-3 divide-y divide-slate-100">
-              {lowStockProducts.map((prod) => (
-                <div key={prod.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-bold text-slate-700">{prod.name}</p>
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase">{prod.category_name}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="px-2 py-0.5 rounded-[2px] text-[10px] font-extrabold bg-danger-light text-danger-red border border-danger-red/10">
-                      {prod.stock_quantity ?? 0} left
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {lowStockCount === 0 && (
-                <div className="p-4 text-center text-xs text-slate-400">
-                  No products are low in stock.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Quick Shortcuts */}
-          <div className="bg-white p-4 rounded-[8px] border border-slate-200 shadow-sm space-y-3">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick POS Shortcuts</h3>
-            <div className="grid grid-cols-2 gap-2 text-center">
-              {[
-                { id: 'pos', label: 'POS Billing' },
-                { id: 'inventory', label: 'Add Product' },
-                { id: 'customers', label: 'Udhaar Ledger' },
-                { id: 'expenses', label: 'Log Expense' }
-              ].map((shortcut) => (
-                <button 
-                  key={shortcut.id}
-                  onClick={() => setActiveTab(shortcut.id)}
-                  className="p-2.5 border border-slate-200 hover:border-primary-blue hover:bg-primary-light rounded-[4px] transition-all text-xs font-semibold text-slate-700 cursor-pointer"
-                >
-                  {shortcut.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-        </div>
-
+        </Card>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card title="Shift Summary">
+          <table className="erp-table text-xs">
+            <thead><tr><th>Cashier</th><th>Register</th><th>Status</th><th>Expected</th><th>Diff</th></tr></thead>
+            <tbody>
+              {shifts.slice(0, 8).map((s: any) => (
+                <tr key={s.id}><td>{s.cashier_name}</td><td>{s.register_id}</td><td>{s.status}</td><td>{money(s.expected_cash)}</td><td>{money(s.difference || 0)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+
+        <Card title="Recent Activity">
+          <table className="erp-table text-xs">
+            <thead><tr><th>Time</th><th>Action</th><th>Details</th></tr></thead>
+            <tbody>
+              {recent.slice(0, 8).map((r: any, idx: number) => (
+                <tr key={idx}><td>{r.created_at}</td><td>{r.action}</td><td>{r.details}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+
+      <DashboardDateDetailDrawer open={detailOpen} onClose={() => setDetailOpen(false)} data={detailData} loading={detailLoading} />
     </div>
   );
 };

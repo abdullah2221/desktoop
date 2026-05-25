@@ -14,11 +14,14 @@ import {
   FolderSymlink, 
   AlertTriangle, 
   CheckCircle,
+  Eye,
   FileText,
+  RotateCcw,
   XCircle,
   Percent,
   Coins
 } from 'lucide-react';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 
 interface SuspendedCart {
   id: string;
@@ -49,6 +52,7 @@ export const PosPage: React.FC = () => {
     setPosTaxRate,
     setPaymentType,
     notify,
+    hasPermission,
     activeUser,
     activeBranch,
     setActiveTab
@@ -467,11 +471,15 @@ export const PosPage: React.FC = () => {
 
   // Stock Warnings Check
   const hasLowStockWarnings = cart.some(item => item.quantity >= (item.product.stock_quantity ?? 0));
-  const isRegisteredCustomer = posCustomerName !== 'Walk-in Customer' && customerList.some((c) => c.name === posCustomerName);
+  const isRegisteredCustomer = posCustomerName !== 'Walk-in Customer' && customerList.some((c) => c.name === posCustomerName && String(c.status || 'active') !== 'inactive');
   const currentCashier = activeUser?.full_name || activeUser?.username || 'System Cashier';
   const currentBranch = activeBranch?.branch_name || activeBranch?.branch_code || 'Main Branch';
 
   const quickAddCustomer = async () => {
+    if (!hasPermission('customers.create')) {
+      notify('error', 'You do not have permission to create customers.');
+      return;
+    }
     const name = quickCustomerName.trim();
     if (!name) {
       notify('error', 'Customer name is required.');
@@ -1296,9 +1304,10 @@ export const PosPage: React.FC = () => {
                   <td>{row.branch_name || row.branch_id || '-'}</td>
                   <td><Badge variant={row.status === 'Paid' ? 'success' : 'warning'}>{row.status}</Badge></td>
                   <td>Rs. {Number(row.total || 0).toLocaleString()}</td>
-                  <td className="flex gap-1">
-                    <Button size="sm" variant="secondary" onClick={() => notify('info', `Receipt ${row.invoiceNo} - ${row.customerName || 'Walk-in Customer'}`)}>View</Button>
-                    <Button size="sm" variant="secondary" onClick={async () => {
+                  <td>
+                    <div className="flex items-center gap-1">
+                    <IconActionButton icon={<Eye className="w-3.5 h-3.5" />} tooltip="View details" variant="primary" onClick={() => notify('info', `Receipt ${row.invoiceNo} - ${row.customerName || 'Walk-in Customer'}`)} />
+                    <IconActionButton icon={<Printer className="w-3.5 h-3.5" />} tooltip="Print receipt" onClick={async () => {
                       try {
                         const items = await window.api.sales.getItems(row.invoiceNo);
                         await window.api.receipts.print({ ...row, items }, true);
@@ -1306,8 +1315,9 @@ export const PosPage: React.FC = () => {
                       } catch (error: any) {
                         notify('error', error?.message || 'Failed to reprint receipt.');
                       }
-                    }}>Reprint</Button>
-                    <Button size="sm" variant="secondary" onClick={() => setActiveTab('sales_returns')}>Return</Button>
+                    }} />
+                    <IconActionButton icon={<RotateCcw className="w-3.5 h-3.5" />} tooltip="Create return" onClick={() => setActiveTab('sales_returns')} />
+                    </div>
                   </td>
                 </tr>
               ))}

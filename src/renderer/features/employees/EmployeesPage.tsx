@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BadgeCheck, Briefcase, Save, UserPlus } from 'lucide-react';
+import { BadgeCheck, Briefcase, Pencil, Power, Save, UserPlus } from 'lucide-react';
 import { useErp } from '../../app/providers/ErpContext';
 import { Employee } from '../../shared/types';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 
 const emptyEmployee: Partial<Employee> = {
   employee_code: '',
@@ -103,7 +104,7 @@ export const EmployeesPage: React.FC = () => {
           </div>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-2 text-left">Employee</th><th className="px-4 py-2 text-left">Branch</th><th className="px-4 py-2 text-right">Hourly</th><th className="px-4 py-2 text-right">Salary</th><th className="px-4 py-2 text-left">Status</th><th className="px-4 py-2 text-right">Actions</th></tr></thead>
-            <tbody>{employees.map((employee) => <tr key={employee.id} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-4 py-2"><div className="font-bold text-slate-800">{employee.employee_code} - {employee.name}</div><div className="text-slate-500">{employee.designation || 'Staff'} · {employee.phone || '-'}</div></td><td className="px-4 py-2">{employee.branch_name || 'Unassigned'}</td><td className="px-4 py-2 text-right">{Number(employee.hourly_rate || 0).toLocaleString()}</td><td className="px-4 py-2 text-right">{Number(employee.monthly_salary || 0).toLocaleString()}</td><td className="px-4 py-2"><Badge value={employee.status} /></td><td className="px-4 py-2 text-right space-x-2"><button className="text-primary-blue font-bold" onClick={() => edit(employee)}>Edit</button>{employee.status === 'active' && <button className="text-red-600 font-bold" onClick={() => deactivate(employee.id)}>Deactivate</button>}</td></tr>)}</tbody>
+            <tbody>{employees.map((employee) => <tr key={employee.id} className="border-t border-slate-100 hover:bg-slate-50"><td className="px-4 py-2"><div className="font-bold text-slate-800">{employee.employee_code} - {employee.name}</div><div className="text-slate-500">{employee.designation || 'Staff'} · {employee.phone || '-'}</div></td><td className="px-4 py-2">{employee.branch_name || 'Unassigned'}</td><td className="px-4 py-2 text-right">{Number(employee.hourly_rate || 0).toLocaleString()}</td><td className="px-4 py-2 text-right">{Number(employee.monthly_salary || 0).toLocaleString()}</td><td className="px-4 py-2"><Badge value={employee.status} /></td><td className="px-4 py-2"><div className="flex items-center justify-end gap-1"><IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit Employee" onClick={() => edit(employee)} />{employee.status === 'active' && <IconActionButton icon={<Power className="w-3.5 h-3.5" />} tooltip="Deactivate Employee" danger onClick={() => deactivate(employee.id)} />}</div></td></tr>)}</tbody>
           </table>
         </section>
       </div>

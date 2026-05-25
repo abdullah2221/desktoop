@@ -5,6 +5,8 @@ import { Card } from '../../shared/ui/Card';
 import { Input } from '../../shared/ui/Input';
 import { Button } from '../../shared/ui/Button';
 import { Badge } from '../../shared/ui/Badge';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
+import { Pencil, Power } from 'lucide-react';
 
 export const TaxSettingsPage: React.FC = () => {
   const { notify } = useErp();
@@ -89,9 +91,11 @@ export const TaxSettingsPage: React.FC = () => {
                       <td>{r.mode}</td>
                       <td>{r.rate}%</td>
                       <td><Badge variant={r.status === 'active' ? 'success' : 'danger'}>{r.status}</Badge></td>
-                      <td className="flex gap-1">
-                        <Button size="sm" variant="secondary" onClick={() => setForm(r)}>Edit</Button>
-                        <Button size="sm" variant="danger" onClick={async () => { await window.api.taxes.deactivateRate(r.id); await loadRates(); }}>Deactivate</Button>
+                      <td>
+                        <div className="flex items-center gap-1">
+                          <IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit Tax Rate" onClick={() => setForm(r)} />
+                          <IconActionButton icon={<Power className="w-3.5 h-3.5" />} tooltip="Deactivate Tax Rate" danger onClick={async () => { await window.api.taxes.deactivateRate(r.id); await loadRates(); }} />
+                        </div>
                       </td>
                     </tr>
                   ))}

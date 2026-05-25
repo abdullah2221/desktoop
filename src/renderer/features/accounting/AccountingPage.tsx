@@ -4,7 +4,9 @@ import { Account, JournalEntry, JournalEntryLine } from '../../shared/types';
 import { Button } from '../../shared/ui/Button';
 import { Badge } from '../../shared/ui/Badge';
 import { Card } from '../../shared/ui/Card';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 import { Input } from '../../shared/ui/Input';
+import { CircleOff, Eye, Pencil } from 'lucide-react';
 
 interface JournalWithLines extends JournalEntry {
   lines?: JournalEntryLine[];
@@ -212,9 +214,11 @@ export const AccountingPage: React.FC = () => {
                       <td>{a.account_type}{a.account_subtype ? ` / ${a.account_subtype}` : ''}</td>
                       <td>{Math.abs(a.current_balance).toFixed(2)} {polarity}</td>
                       <td><Badge variant={a.status === 'active' ? 'success' : 'danger'}>{a.status}</Badge></td>
-                      <td className="flex gap-1">
-                        <Button size="sm" variant="secondary" onClick={() => openAccountForm(a)} disabled={Boolean(a.is_system_account)}>Edit</Button>
-                        <Button size="sm" variant="danger" onClick={() => deactivateAccount(a)} disabled={Boolean(a.is_system_account)}>Deactivate</Button>
+                      <td>
+                        <div className="flex items-center gap-1">
+                          <IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit record" onClick={() => openAccountForm(a)} disabled={Boolean(a.is_system_account)} disabledTooltip="System account cannot be edited" />
+                          <IconActionButton icon={<CircleOff className="w-3.5 h-3.5" />} tooltip="Deactivate record" danger onClick={() => deactivateAccount(a)} disabled={Boolean(a.is_system_account)} disabledTooltip="System account cannot be edited" />
+                        </div>
                       </td>
                     </tr>
                   );
@@ -239,7 +243,7 @@ export const AccountingPage: React.FC = () => {
                     <td>{j.total_debit.toFixed(2)}</td>
                     <td>{j.total_credit.toFixed(2)}</td>
                     <td><Badge variant={j.status === 'posted' ? 'success' : 'warning'}>{j.status}</Badge></td>
-                    <td><Button size="sm" variant="secondary" onClick={() => setJournalDrawer(j)}>View</Button></td>
+                    <td><IconActionButton icon={<Eye className="w-3.5 h-3.5" />} tooltip="View details" onClick={() => setJournalDrawer(j)} /></td>
                   </tr>
                 ))}
               </tbody>

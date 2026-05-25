@@ -158,7 +158,22 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('erp_session_token', result.token);
       setActiveUser(result.user);
       const nextBranchId = syncBranchesForUser(result.user);
-      setActiveTab('dashboard');
+      if (result.user.role_id === 'R003') {
+        try {
+          const registers = await window.api.cashierShifts.getRegisters(nextBranchId || result.user.branch_id || 'B001');
+          const firstRegister = registers?.[0]?.id;
+          if (firstRegister) {
+            const activeShift = await window.api.cashierShifts.getActiveShift(nextBranchId || result.user.branch_id || 'B001', firstRegister);
+            setActiveTab(activeShift ? 'dashboard' : 'pos');
+          } else {
+            setActiveTab('pos');
+          }
+        } catch {
+          setActiveTab('pos');
+        }
+      } else {
+        setActiveTab('dashboard');
+      }
       await reloadData(nextBranchId);
       return true;
     } catch (err: any) {
@@ -332,6 +347,10 @@ export const ErpProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let selectedRegisteredCustomer = customers.find((customer) => customer.name === normalizedCustomerName) as any;
       if (!selectedRegisteredCustomer && !isWalkIn) {
         selectedRegisteredCustomer = await window.api.customers.getByName(posCustomerName);
+      }
+      if (selectedRegisteredCustomer && String(selectedRegisteredCustomer.status || 'active') === 'inactive') {
+        notify('error', 'Inactive customer cannot be used for new khata sale.');
+        return;
       }
       const customerType: 'WALK_IN' | 'REGISTERED' = selectedRegisteredCustomer ? 'REGISTERED' : 'WALK_IN';
       if (paymentType === 'Credit' && customerType !== 'REGISTERED') {

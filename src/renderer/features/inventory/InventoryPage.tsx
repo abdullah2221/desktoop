@@ -7,6 +7,7 @@ import { Button } from '../../shared/ui/Button';
 import { Badge } from '../../shared/ui/Badge';
 import { Product } from '../../shared/types';
 import { Search, Plus, Edit, X, Box, Tag, AlertTriangle, Eye, PowerOff } from 'lucide-react';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 
 export const InventoryPage: React.FC = () => {
   const { products, categories, suppliers, units, brands, addProduct, updateProduct, deactivateProduct, notify } = useErp();
@@ -241,17 +242,11 @@ export const InventoryPage: React.FC = () => {
     {
       header: 'Actions',
       accessor: (p) => (
-        <div className="flex items-center gap-2">
-          <button onClick={() => handleViewProfile(p)} title="View Profile" className="text-slate-400 hover:text-primary-blue transition-colors cursor-pointer p-1">
-            <Eye className="w-4 h-4" />
-          </button>
-          <button onClick={() => handleEdit(p)} title="Edit Product" className="text-slate-400 hover:text-warning-amber transition-colors cursor-pointer p-1">
-            <Edit className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-1">
+          <IconActionButton icon={<Eye className="w-3.5 h-3.5" />} tooltip="View Product Profile" variant="primary" onClick={() => handleViewProfile(p)} />
+          <IconActionButton icon={<Edit className="w-3.5 h-3.5" />} tooltip="Edit Product" onClick={() => handleEdit(p)} />
           {p.status === 'active' && (
-            <button onClick={() => handleDeactivate(p.id)} title="Deactivate" className="text-slate-400 hover:text-danger-red transition-colors cursor-pointer p-1">
-              <PowerOff className="w-4 h-4" />
-            </button>
+            <IconActionButton icon={<PowerOff className="w-3.5 h-3.5" />} tooltip="Deactivate Product" danger onClick={() => handleDeactivate(p.id)} />
           )}
         </div>
       )
@@ -472,9 +467,7 @@ export const InventoryPage: React.FC = () => {
                   Product Profile
                 </h3>
                 <div className="flex gap-2">
-                  <button onClick={() => handleEdit(selectedProduct)} className="text-primary-blue hover:underline text-xs flex items-center gap-1 cursor-pointer">
-                    <Edit className="w-3 h-3" /> Edit
-                  </button>
+                  <IconActionButton icon={<Edit className="w-3.5 h-3.5" />} tooltip="Edit Product" onClick={() => handleEdit(selectedProduct)} />
                   <button onClick={() => setView('list')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-2">
                     <X className="w-4 h-4" />
                   </button>

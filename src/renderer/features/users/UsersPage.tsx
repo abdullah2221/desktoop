@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, ShieldCheck } from 'lucide-react';
+import { KeyRound, Pencil, Power, ShieldCheck } from 'lucide-react';
 import { useErp } from '../../app/providers/ErpContext';
 import { Branch, User } from '../../shared/types';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 import { Input } from '../../shared/ui/Input';
 import { RolesPage } from './RolesPage';
 
@@ -105,7 +106,12 @@ export const UsersPage: React.FC = () => {
                     <td>{user.branch_id || 'B001'}</td>
                     <td>{user.last_login || '-'}</td>
                     <td><Badge variant={user.status === 'active' ? 'success' : 'danger'}>{user.status}</Badge></td>
-                    <td className="flex gap-1"><Button size="sm" variant="secondary" onClick={() => edit(user)}>Edit</Button><Button size="sm" variant="danger" onClick={() => deactivate(user.id)} disabled={user.id === activeUser?.id}>Deactivate</Button></td>
+                    <td>
+                      <div className="flex items-center gap-1">
+                        <IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit record" onClick={() => edit(user)} />
+                        <IconActionButton icon={<Power className="w-3.5 h-3.5" />} tooltip="Deactivate record" danger onClick={() => deactivate(user.id)} disabled={user.id === activeUser?.id} disabledTooltip="You cannot deactivate your own account" />
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

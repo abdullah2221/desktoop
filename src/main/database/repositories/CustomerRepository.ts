@@ -1,9 +1,28 @@
 import { getDatabase } from '../connection';
+import { AccountingPostingService } from './AccountingPostingService';
 
 export class CustomerRepository {
-  static getAll() {
+  static getAll(filters: { include_inactive?: boolean; branch_id?: string | null; search?: string | null } = {}) {
     const db = getDatabase();
-    return db.prepare("SELECT * FROM customers WHERE status != 'inactive' ORDER BY name ASC").all();
+    return db.prepare(`
+      SELECT *
+      FROM customers
+      WHERE (@include_inactive = 1 OR COALESCE(status, 'active') != 'inactive')
+        AND (@branch_id IS NULL OR branch_id = @branch_id)
+        AND (
+          @search IS NULL
+          OR lower(name) LIKE '%' || lower(@search) || '%'
+          OR lower(COALESCE(phone, '')) LIKE '%' || lower(@search) || '%'
+          OR lower(COALESCE(whatsapp, '')) LIKE '%' || lower(@search) || '%'
+          OR lower(COALESCE(city, '')) LIKE '%' || lower(@search) || '%'
+          OR lower(COALESCE(customer_code, '')) LIKE '%' || lower(@search) || '%'
+        )
+      ORDER BY name ASC
+    `).all({
+      include_inactive: filters.include_inactive ? 1 : 0,
+      branch_id: filters.branch_id || null,
+      search: (filters.search || '').trim() || null
+    });
   }
 
   static create(payload: any) {
@@ -12,20 +31,25 @@ export class CustomerRepository {
     if (!name) throw new Error('Customer name is required.');
     const info = db.prepare(`
       INSERT INTO customers (
-        name, tenant_id, branch_id, phone, whatsapp, address, opening_balance, totalPurchases, credit, lastPayment, credit_limit, due_days, status, updated_at
+        name, customer_code, tenant_id, branch_id, phone, whatsapp, email, address, city, notes, opening_balance, totalPurchases, credit, lastPayment, due_date, credit_limit, due_days, status, updated_at
       ) VALUES (
-        @name, 'T001', @branch_id, @phone, @whatsapp, @address, @opening_balance, @totalPurchases, @credit, @lastPayment, @credit_limit, @due_days, @status, CURRENT_TIMESTAMP
+        @name, @customer_code, 'T001', @branch_id, @phone, @whatsapp, @email, @address, @city, @notes, @opening_balance, @totalPurchases, @credit, @lastPayment, @due_date, @credit_limit, @due_days, @status, CURRENT_TIMESTAMP
       )
     `).run({
       name,
+      customer_code: payload.customer_code || `CUST-${Date.now()}`,
       branch_id: payload.branch_id || 'B001',
       phone: payload.phone || '',
       whatsapp: payload.whatsapp || payload.phone || '',
+      email: payload.email || '',
       address: payload.address || '',
+      city: payload.city || '',
+      notes: payload.notes || '',
       opening_balance: Number(payload.opening_balance || 0),
       totalPurchases: Number(payload.totalPurchases || 0),
       credit: Number(payload.credit || 0),
       lastPayment: payload.lastPayment || new Date().toISOString().split('T')[0],
+      due_date: payload.due_date || null,
       credit_limit: Number(payload.credit_limit || 0),
       due_days: Number(payload.due_days || 0),
       status: payload.status || 'active'
@@ -37,13 +61,18 @@ export class CustomerRepository {
     const db = getDatabase();
     const info = db.prepare(`
       UPDATE customers
-      SET phone=@phone,
+      SET customer_code=@customer_code,
+          phone=@phone,
           whatsapp=@whatsapp,
+          email=@email,
           address=@address,
+          city=@city,
+          notes=@notes,
           opening_balance=@opening_balance,
           totalPurchases=@totalPurchases,
           credit=@credit,
           lastPayment=@lastPayment,
+          due_date=@due_date,
           credit_limit=@credit_limit,
           due_days=@due_days,
           status=@status,
@@ -51,13 +80,18 @@ export class CustomerRepository {
       WHERE name=@name
     `).run({
       name: payload.name,
+      customer_code: payload.customer_code || null,
       phone: payload.phone || '',
       whatsapp: payload.whatsapp || payload.phone || '',
+      email: payload.email || '',
       address: payload.address || '',
+      city: payload.city || '',
+      notes: payload.notes || '',
       opening_balance: Number(payload.opening_balance || 0),
       totalPurchases: Number(payload.totalPurchases || 0),
       credit: Number(payload.credit || 0),
       lastPayment: payload.lastPayment || new Date().toISOString().split('T')[0],
+      due_date: payload.due_date || null,
       credit_limit: Number(payload.credit_limit || 0),
       due_days: Number(payload.due_days || 0),
       status: payload.status || 'active'
@@ -71,6 +105,12 @@ export class CustomerRepository {
     return info.changes > 0;
   }
 
+  static reactivate(name: string) {
+    const db = getDatabase();
+    const info = db.prepare(`UPDATE customers SET status='active', updated_at=CURRENT_TIMESTAMP WHERE name=?`).run(name);
+    return info.changes > 0;
+  }
+
   static getByName(name: string) {
     const db = getDatabase();
     return db.prepare('SELECT * FROM customers WHERE name=?').get(name);
@@ -78,6 +118,11 @@ export class CustomerRepository {
 
   static getById(name: string) {
     return this.getByName(name);
+  }
+
+  static getByPhone(phone: string) {
+    const db = getDatabase();
+    return db.prepare('SELECT * FROM customers WHERE phone=? OR whatsapp=? LIMIT 1').get(phone, phone);
   }
 
   static getSales(name: string) {
@@ -108,6 +153,17 @@ export class CustomerRepository {
       JOIN invoices i ON i.id = ip.invoice_id
       WHERE i.customer_id = @name OR i.customer_name = @name
       ORDER BY ip.payment_date DESC, ip.created_at DESC
+    `).all({ name });
+  }
+
+  static getReturns(name: string) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT sr.*, s.invoiceNo as sale_invoice, s.customerName
+      FROM sales_returns sr
+      LEFT JOIN sales s ON s.invoiceNo = sr.sale_id
+      WHERE sr.customer_id = @name OR s.customer_id = @name OR s.customerName = @name
+      ORDER BY sr.created_at DESC
     `).all({ name });
   }
 
@@ -263,11 +319,20 @@ export class CustomerRepository {
         created_by: data.created_by || null
       });
       const newCredit = Math.max(0, Number(customer.credit || 0) - amount);
+      const resolvedBranchId = data.branch_id || customer.branch_id || 'B001';
       db.prepare(`
         UPDATE customers
         SET credit = ?, lastPayment = ?, updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `).run(newCredit, data.payment_date, data.customer_name);
+      AccountingPostingService.postKhataPayment({
+        paymentId: id,
+        customerName: data.customer_name,
+        date: data.payment_date,
+        amount,
+        method: data.payment_method,
+        branchId: resolvedBranchId
+      });
       return { success: true, id, new_balance: newCredit };
     });
     return tx(payload);
@@ -307,11 +372,20 @@ export class CustomerRepository {
       });
       const delta = data.adjustment_type === 'DEBIT' ? amount : -amount;
       const newCredit = Math.max(0, Number(customer.credit || 0) + delta);
+      const resolvedBranchId = data.branch_id || customer.branch_id || 'B001';
       db.prepare(`
         UPDATE customers
         SET credit = ?, updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `).run(newCredit, data.customer_name);
+      AccountingPostingService.postKhataAdjustment({
+        adjustmentId: id,
+        customerName: data.customer_name,
+        date: data.adjustment_date,
+        type: data.adjustment_type,
+        amount,
+        branchId: resolvedBranchId
+      });
       return { success: true, id, new_balance: newCredit };
     });
     return tx(payload);
@@ -331,6 +405,8 @@ export class CustomerRepository {
         customer_name: row.name,
         phone: row.phone,
         whatsapp: row.whatsapp || row.phone || '',
+        city: row.city || '',
+        notes: row.notes || '',
         due_date: dueDate.toISOString().split('T')[0],
         overdue_days: balance > 0 ? overdueDays : 0,
         balance,
@@ -361,24 +437,31 @@ export class CustomerRepository {
 
   static createOrIncrementCredit(name: string, creditChange: number, purchasesChange: number, paymentDate: string) {
     const db = getDatabase();
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName || normalizedName.toLowerCase() === 'walk-in customer') {
+      return false;
+    }
     
     // Check if customer exists first
-    const customer = db.prepare('SELECT * FROM customers WHERE name = ?').get(name) as any;
+    const customer = db.prepare('SELECT * FROM customers WHERE name = ?').get(normalizedName) as any;
     
     if (customer) {
+      if (String(customer.status || 'active') === 'inactive') {
+        throw new Error('Inactive customer cannot be used for khata.');
+      }
       const stmt = db.prepare(`
         UPDATE customers 
         SET credit = credit + ?, totalPurchases = totalPurchases + ?, lastPayment = ?, updated_at = CURRENT_TIMESTAMP
         WHERE name = ?
       `);
-      const info = stmt.run(creditChange, purchasesChange, paymentDate, name);
+      const info = stmt.run(creditChange, purchasesChange, paymentDate, normalizedName);
       return info.changes > 0;
     } else {
       const stmt = db.prepare(`
-        INSERT INTO customers (name, tenant_id, branch_id, phone, totalPurchases, credit, lastPayment)
-        VALUES (?, 'T001', 'B001', '0300-0000000', ?, ?, ?)
+        INSERT INTO customers (name, customer_code, tenant_id, branch_id, phone, totalPurchases, credit, lastPayment, status)
+        VALUES (?, ?, 'T001', 'B001', '0300-0000000', ?, ?, ?, 'active')
       `);
-      const info = stmt.run(name, purchasesChange, creditChange, paymentDate);
+      const info = stmt.run(normalizedName, `CUST-${Date.now()}`, purchasesChange, creditChange, paymentDate);
       return info.changes > 0;
     }
   }
@@ -392,5 +475,41 @@ export class CustomerRepository {
     `);
     const info = stmt.run(payAmt, paymentDate, name);
     return info.changes > 0;
+  }
+
+  static getCreditLimitWarnings() {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT
+        name as customer_name,
+        credit as current_balance,
+        credit_limit,
+        (credit - credit_limit) as exceeded_by
+      FROM customers
+      WHERE COALESCE(status, 'active') != 'inactive'
+        AND COALESCE(credit_limit, 0) > 0
+        AND COALESCE(credit, 0) > COALESCE(credit_limit, 0)
+      ORDER BY exceeded_by DESC
+    `).all();
+  }
+
+  static getAging(asOfDate: string) {
+    const rows = this.getOverdue(asOfDate) as any[];
+    const buckets = {
+      current: 0,
+      b0_30: 0,
+      b31_60: 0,
+      b61_90: 0,
+      b90_plus: 0
+    };
+    for (const row of rows) {
+      const bal = Number(row.balance || 0);
+      if (row.aging_bucket === '0-30') buckets.b0_30 += bal;
+      else if (row.aging_bucket === '31-60') buckets.b31_60 += bal;
+      else if (row.aging_bucket === '61-90') buckets.b61_90 += bal;
+      else if (row.aging_bucket === '90+') buckets.b90_plus += bal;
+      else buckets.current += bal;
+    }
+    return { as_of_date: asOfDate, ...buckets, total: Object.values(buckets).reduce((a, b) => a + b, 0), rows };
   }
 }

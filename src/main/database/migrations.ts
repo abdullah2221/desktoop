@@ -1186,10 +1186,15 @@ function runBackfillAndAlters() {
   addColumn('users', 'last_login TEXT');
   addColumn('customers', 'credit_limit REAL DEFAULT 0.0');
   addColumn('customers', 'due_days INTEGER DEFAULT 0');
+  addColumn('customers', 'due_date TEXT');
   addColumn('customers', 'status TEXT DEFAULT "active"');
   addColumn('customers', 'whatsapp TEXT');
   addColumn('customers', 'address TEXT');
+  addColumn('customers', 'city TEXT');
+  addColumn('customers', 'notes TEXT');
   addColumn('customers', 'opening_balance REAL DEFAULT 0.0');
+  addColumn('customers', 'customer_code TEXT');
+  addColumn('customers', 'email TEXT');
 
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_cashier_shifts_open ON cashier_shifts(user_id, branch_id, register_id, status)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_shift_cash_movements_shift ON shift_cash_movements(shift_id, created_at)`).run();
@@ -1349,6 +1354,14 @@ function runBackfillAndAlters() {
   createIndex('idx_expenses_branch', 'expenses', 'branch_id');
   createIndex('idx_invoices_branch', 'invoices', 'branch_id');
   createIndex('idx_sales_recent_filters', 'sales', 'date, cashier_id, branch_id');
+  createIndex('idx_sales_sale_time', 'sales', 'sale_time');
+  createIndex('idx_sales_cashier_id', 'sales', 'cashier_id');
+  createIndex('idx_sales_branch_id_only', 'sales', 'branch_id');
+  createIndex('idx_invoices_created_at', 'invoices', 'created_at');
+  createIndex('idx_expenses_date', 'expenses', 'date');
+  createIndex('idx_stock_movements_created_at', 'stock_movements', 'created_at');
+  createIndex('idx_cashier_shifts_opened_at', 'cashier_shifts', 'opened_at');
+  createIndex('idx_journal_entries_entry_date', 'journal_entries', 'entry_date');
   createIndex('idx_invoices_recent_filters', 'invoices', 'invoice_date, cashier_id, branch_id');
 
   createIndex('idx_import_jobs_created', 'import_jobs', 'created_at');
@@ -1394,6 +1407,9 @@ function seedDefaults() {
 
       INSERT OR IGNORE INTO permissions (id, name, description) VALUES
       ('PERM-POS-SALE-CREATE', 'pos.sale.create', 'Create POS sales'),
+      ('PERM-SHIFT-OPEN', 'shift.open', 'Open cashier shift/day start'),
+      ('PERM-SHIFT-CLOSE', 'shift.close', 'Close cashier shift/day end'),
+      ('PERM-SHIFT-FORCE-CLOSE', 'shift.force_close', 'Force close abandoned/open shifts'),
       ('PERM-INVENTORY-PRODUCT-EDIT', 'inventory.product.edit', 'Create and edit inventory products'),
       ('PERM-PURCHASE-CREATE', 'purchase.create', 'Create purchase documents'),
       ('PERM-SUPPLIER-EDIT', 'supplier.edit', 'Create and edit suppliers'),
@@ -1404,6 +1420,12 @@ function seedDefaults() {
       ('PERM-BANKING-MANAGE', 'banking.manage', 'Manage bank and cash transactions'),
       ('PERM-TAXES-MANAGE', 'taxes.manage', 'Manage tax setup and reports'),
       ('PERM-BACKUP-MANAGE', 'backup.manage', 'Create backups, restore data, and manage retention');
+      INSERT OR IGNORE INTO permissions (id, name, description) VALUES
+      ('PERM-BACKUP-CREATE', 'backup.create', 'Create full store backups'),
+      ('PERM-BACKUP-RESTORE', 'backup.restore', 'Restore store backups'),
+      ('PERM-BACKUP-VIEW', 'backup.view', 'View backup history and validations'),
+      ('PERM-BACKUP-EXPORT', 'backup.export', 'Select export destination/open backup folder'),
+      ('PERM-BACKUP-IMPORT', 'backup.import', 'Import/select backup files');
       INSERT OR IGNORE INTO permissions (id, name, description) VALUES
       ('PERM-BRANCH-MANAGE', 'branch.manage', 'Manage branches, classes, and branch access'),
       ('PERM-BUDGET-MANAGE', 'budget.manage', 'Create and manage budgets'),
@@ -1426,8 +1448,13 @@ function seedDefaults() {
       ('PERM-NOTIFICATIONS-VIEW', 'notifications.view', 'View operational notifications and alerts'),
       ('PERM-NOTIFICATIONS-MANAGE', 'notifications.manage', 'Manage notification rules, scans, and dismissals'),
       ('PERM-KHATA-VIEW', 'khata.view', 'View customer khata ledger and statements'),
+      ('PERM-KHATA-STATEMENT', 'khata.statement', 'View and print detailed khata statements'),
       ('PERM-KHATA-PAYMENT', 'khata.payment', 'Record khata payments and issue receipts'),
       ('PERM-KHATA-ADJUST', 'khata.adjust', 'Post khata adjustments'),
+      ('PERM-CUSTOMERS-VIEW', 'customers.view', 'View/search customer profiles'),
+      ('PERM-CUSTOMERS-CREATE', 'customers.create', 'Create customer profiles'),
+      ('PERM-CUSTOMERS-EDIT', 'customers.edit', 'Edit customer profiles'),
+      ('PERM-CUSTOMERS-DEACTIVATE', 'customers.deactivate', 'Deactivate/reactivate customer profiles'),
       ('PERM-SALES-VIEW-OWN', 'sales.view.own', 'View own POS receipts'),
       ('PERM-SALES-VIEW-BRANCH', 'sales.view.branch', 'View branch sales receipts/invoices'),
       ('PERM-SALES-VIEW-ALL', 'sales.view.all', 'View all branch sales receipts/invoices'),
@@ -1435,13 +1462,19 @@ function seedDefaults() {
       ('PERM-SALES-VOID', 'sales.void', 'Void sales receipts'),
       ('PERM-SALES-DELETE', 'sales.delete', 'Hard delete sales when policy allows'),
       ('PERM-SALES-EDIT-DRAFT', 'sales.edit_draft', 'Edit draft sales invoices'),
-      ('PERM-SALES-RETURN', 'sales.return', 'Create sales returns');
+      ('PERM-SALES-RETURN', 'sales.return', 'Create sales returns'),
+      ('PERM-REPORTS-VIEW-BRANCH', 'reports.view.branch', 'View reports limited to assigned branch'),
+      ('PERM-REPORTS-VIEW-ALL', 'reports.view.all', 'View reports across all branches'),
+      ('PERM-CASHIER-AUDIT', 'cashier.audit', 'Inspect cashier accountability, discrepancies, and audit trails');
 
       INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
       SELECT 'R001', id FROM permissions;
 
       INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES
       ('R002', 'PERM-POS-SALE-CREATE'),
+      ('R002', 'PERM-SHIFT-OPEN'),
+      ('R002', 'PERM-SHIFT-CLOSE'),
+      ('R002', 'PERM-SHIFT-FORCE-CLOSE'),
       ('R002', 'PERM-INVENTORY-PRODUCT-EDIT'),
       ('R002', 'PERM-PURCHASE-CREATE'),
       ('R002', 'PERM-SUPPLIER-EDIT'),
@@ -1461,20 +1494,36 @@ function seedDefaults() {
       ('R002', 'PERM-NOTIFICATIONS-VIEW'),
       ('R002', 'PERM-NOTIFICATIONS-MANAGE'),
       ('R002', 'PERM-KHATA-VIEW'),
+      ('R002', 'PERM-KHATA-STATEMENT'),
       ('R002', 'PERM-KHATA-PAYMENT'),
+      ('R002', 'PERM-CUSTOMERS-VIEW'),
+      ('R002', 'PERM-CUSTOMERS-CREATE'),
+      ('R002', 'PERM-CUSTOMERS-EDIT'),
+      ('R002', 'PERM-CUSTOMERS-DEACTIVATE'),
+      ('R002', 'PERM-BACKUP-CREATE'),
+      ('R002', 'PERM-BACKUP-VIEW'),
+      ('R002', 'PERM-BACKUP-EXPORT'),
+      ('R002', 'PERM-BACKUP-IMPORT'),
       ('R002', 'PERM-SALES-VIEW-BRANCH'),
       ('R002', 'PERM-SALES-REPRINT'),
       ('R002', 'PERM-SALES-VOID'),
       ('R002', 'PERM-SALES-RETURN'),
       ('R003', 'PERM-POS-SALE-CREATE'),
+      ('R003', 'PERM-SHIFT-OPEN'),
+      ('R003', 'PERM-SHIFT-CLOSE'),
       ('R003', 'PERM-TIME-TRACK'),
       ('R003', 'PERM-DISCOUNT-APPLY'),
       ('R003', 'PERM-NOTIFICATIONS-VIEW'),
       ('R003', 'PERM-KHATA-VIEW'),
+      ('R003', 'PERM-KHATA-STATEMENT'),
+      ('R003', 'PERM-CUSTOMERS-VIEW'),
+      ('R003', 'PERM-CUSTOMERS-CREATE'),
       ('R003', 'PERM-SALES-VIEW-OWN'),
       ('R003', 'PERM-SALES-REPRINT'),
       ('R003', 'PERM-SALES-RETURN'),
       ('R004', 'PERM-REPORTS-VIEW'),
+      ('R004', 'PERM-REPORTS-VIEW-ALL'),
+      ('R004', 'PERM-CASHIER-AUDIT'),
       ('R004', 'PERM-ACCOUNTING-JOURNAL-CREATE'),
       ('R004', 'PERM-BUDGET-MANAGE'),
       ('R004', 'PERM-AUTOMATION-MANAGE'),
@@ -1484,19 +1533,35 @@ function seedDefaults() {
       ('R004', 'PERM-RETURNS-VIEW'),
       ('R004', 'PERM-NOTIFICATIONS-VIEW'),
       ('R004', 'PERM-KHATA-VIEW'),
+      ('R004', 'PERM-KHATA-STATEMENT'),
       ('R004', 'PERM-KHATA-PAYMENT'),
       ('R004', 'PERM-KHATA-ADJUST'),
+      ('R004', 'PERM-CUSTOMERS-VIEW'),
+      ('R004', 'PERM-CUSTOMERS-CREATE'),
+      ('R004', 'PERM-CUSTOMERS-EDIT'),
+      ('R004', 'PERM-CUSTOMERS-DEACTIVATE'),
       ('R004', 'PERM-SALES-VIEW-ALL'),
       ('R004', 'PERM-SALES-REPRINT'),
-      ('R004', 'PERM-SALES-VOID');
+      ('R004', 'PERM-SALES-VOID'),
+      ('R001', 'PERM-BACKUP-CREATE'),
+      ('R001', 'PERM-BACKUP-RESTORE'),
+      ('R001', 'PERM-BACKUP-VIEW'),
+      ('R001', 'PERM-BACKUP-EXPORT'),
+      ('R001', 'PERM-BACKUP-IMPORT'),
+      ('R002', 'PERM-BACKUP-MANAGE');
 
       INSERT OR IGNORE INTO backup_settings (key, value) VALUES
       ('automatic_backup_enabled', 'false'),
       ('backup_frequency', 'daily'),
+      ('auto_backup_interval_minutes', '1440'),
       ('retention_count', '10'),
       ('backup_before_migrations', 'true'),
       ('last_backup_path', ''),
       ('last_backup_at', '');
+      INSERT OR IGNORE INTO backup_settings (key, value) VALUES
+      ('require_password_for_backup', 'false'),
+      ('require_admin_password_for_restore', 'true'),
+      ('auto_safety_backup_before_restore', 'true');
 
       INSERT OR IGNORE INTO automation_rules (key, value) VALUES
       ('recurring_auto_run_enabled', 'false'),

@@ -379,6 +379,14 @@ export class SaleRepository {
       if (payload.status === 'Credit' && customerType !== 'REGISTERED') {
         throw new Error('Credit/khata sale requires a registered customer.');
       }
+      if (customerType === 'REGISTERED') {
+        const customerKey = payload.customer_id || payload.customerName;
+        const customer = customerKey ? CustomerRepository.getByName(customerKey) as any : null;
+        if (!customer) throw new Error('Registered customer not found.');
+        if (String(customer.status || 'active') === 'inactive') {
+          throw new Error('Inactive customer cannot be used for new khata sale.');
+        }
+      }
       const grossSubtotal = payload.items.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 0)), 0);
       if ((payload.discount_type || 'fixed') === 'percentage' && Number(payload.discount_value || 0) > 100) {
         throw new Error('Invoice percentage discount cannot exceed 100%.');

@@ -5,7 +5,8 @@ import { Input } from '../../shared/ui/Input';
 import { Button } from '../../shared/ui/Button';
 import { Select } from '../../shared/ui/Select';
 import { Supplier } from '../../shared/types';
-import { ShoppingBag, Plus, User, Edit, Phone, Mail, Building, MapPin, X } from 'lucide-react';
+import { ShoppingBag, Plus, User, Edit, Phone, Mail, Building, MapPin, X, Pencil } from 'lucide-react';
+import { IconActionButton } from '../../shared/ui/IconActionButton';
 
 export const SuppliersPage: React.FC = () => {
   const { suppliers, reloadSuppliers } = useErp();
@@ -187,9 +188,7 @@ export const SuppliersPage: React.FC = () => {
                 Supplier Profile
               </span>
               {selectedSupplier && (
-                <button onClick={() => handleEdit(selectedSupplier)} className="text-primary-blue hover:underline text-xs flex items-center gap-1 cursor-pointer">
-                  <Edit className="w-3 h-3" /> Edit
-                </button>
+                <IconActionButton icon={<Pencil className="w-3.5 h-3.5" />} tooltip="Edit Supplier" onClick={() => handleEdit(selectedSupplier)} />
               )}
             </h3>
 

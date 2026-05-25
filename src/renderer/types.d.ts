@@ -1,4 +1,4 @@
-import type { Account, BankAccount, BankReconciliation, BankReconciliationItem, Branch, BranchInventory, Brand, Budget, Category, ClassTracking, Currency, Employee, ExchangeRate, Expense, InventoryAdjustment, Invoice, InvoicePayment, JournalEntry, JournalEntryLine, MoneyTransaction, NotificationItem, PaymentMethodAccount, Product, Purchase, Quote, RecurringRun, RecurringTemplate, StockMovement, StockTransfer, Supplier, SupplierPayment, Timesheet, Unit, User } from './shared/types';
+import type { Account, BankAccount, BankReconciliation, BankReconciliationItem, Branch, BranchInventory, Brand, Budget, Category, ClassTracking, Currency, DashboardDateDetail, DashboardFilter, DashboardMetricDetail, DashboardOverview, Employee, ExchangeRate, Expense, InventoryAdjustment, Invoice, InvoicePayment, JournalEntry, JournalEntryLine, MoneyTransaction, NotificationItem, PaymentBreakdownPoint, PaymentMethodAccount, Product, Purchase, Quote, RecurringRun, RecurringTemplate, SalesTrendPoint, ShiftSummaryPoint, StockMovement, StockTransfer, Supplier, SupplierPayment, Timesheet, TopProductPoint, Unit, User } from './shared/types';
 
 export interface IElectronAPI {
   getAppVersion: () => Promise<string>;
@@ -47,16 +47,22 @@ export interface IElectronAPI {
     getLedger: (id: string) => Promise<any[]>;
   };
   customers: {
-    getAll: () => Promise<any[]>;
+    getAll: (filters?: any) => Promise<any[]>;
     create: (payload: any) => Promise<boolean>;
     update: (payload: any) => Promise<boolean>;
     deactivate: (name: string) => Promise<boolean>;
+    reactivate: (name: string) => Promise<boolean>;
     getByName: (name: string) => Promise<any>;
     getById: (id: string) => Promise<any>;
+    getByPhone: (phone: string) => Promise<any>;
     getStatement: (id: string) => Promise<any>;
     getSales: (id: string) => Promise<any[]>;
     getInvoices: (id: string) => Promise<any[]>;
     getPayments: (id: string) => Promise<any[]>;
+    getReturns: (id: string) => Promise<any[]>;
+    getAging: (asOfDate: string) => Promise<any>;
+    getOverdue: (asOfDate: string) => Promise<any[]>;
+    getCreditLimitWarnings: () => Promise<any[]>;
     createOrIncrementCredit: (name: string, creditChange: number, purchasesChange: number, date: string) => Promise<boolean>;
     receivePayment: (name: string, payAmt: number, date: string) => Promise<boolean>;
   };
@@ -113,7 +119,22 @@ export interface IElectronAPI {
     openShift: (payload: { branch_id: string; register_id: string; opening_cash: number; notes?: string }) => Promise<{ success: boolean; shift: any; reused?: boolean }>;
     getShiftSummary: (shiftId: string) => Promise<any>;
     closeShift: (payload: { shift_id: string; counted_cash: number; notes?: string }) => Promise<any>;
+    forceCloseShift: (payload: { shift_id: string; counted_cash?: number; notes?: string }) => Promise<any>;
+    suspendShift: (shiftId: string, notes?: string) => Promise<boolean>;
+    resumeShift: (shiftId: string, notes?: string) => Promise<boolean>;
     getOpenShifts: () => Promise<any[]>;
+  };
+  dashboard: {
+    getOverview: (filters: DashboardFilter) => Promise<DashboardOverview>;
+    getSalesTrend: (filters: DashboardFilter) => Promise<{ granularity: 'hourly' | 'daily'; rows: SalesTrendPoint[] }>;
+    getPaymentBreakdown: (filters: DashboardFilter) => Promise<{ rows: PaymentBreakdownPoint[]; total: number }>;
+    getTopProducts: (filters: DashboardFilter) => Promise<{ rows: TopProductPoint[] }>;
+    getRecentActivity: (filters: DashboardFilter) => Promise<{ rows: Array<Record<string, any>> }>;
+    getShiftSummary: (filters: DashboardFilter) => Promise<{ rows: ShiftSummaryPoint[]; open_shifts: number; cash_short_over: number; cash_in_hand: number }>;
+    getLowStock: (filters: DashboardFilter) => Promise<{ rows: Array<Record<string, any>>; total: number }>;
+    getReceivablesPayables: (filters: DashboardFilter) => Promise<Record<string, number>>;
+    getDateDetail: (date: string, filters: DashboardFilter) => Promise<DashboardDateDetail>;
+    getMetricDetail: (metric: string, filters: DashboardFilter) => Promise<DashboardMetricDetail>;
   };
   expenses: {
     getAll: () => Promise<Expense[]>;
@@ -235,6 +256,40 @@ export interface IElectronAPI {
     customerBalance: () => Promise<Record<string, any>>;
     customerAging: (asOfDate: string) => Promise<Record<string, any>>;
     paymentCollection: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    shiftSummary: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    cashierDiscrepancy: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    dailySalesSummary: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    productSales: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    discountSummary: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    returnSummary: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    voidSummary: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    paymentMethod: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    cashDrawerReconciliation: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    branchPerformance: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    cashierSales: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    hourlySales: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    salesInvoices: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    purchaseSummary: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    purchaseReturns: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    stockMovement: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    lowStock: (branchId?: string) => Promise<Record<string, any>>;
+    branchStock: (branchId?: string) => Promise<Record<string, any>>;
+    inventoryAdjustment: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    stockTransfer: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    customerStatement: (customerIdOrName: string, dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    supplierPayable: (dateTo: string) => Promise<Record<string, any>>;
+    supplierLedger: (supplierId: string, dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    supplierPayment: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    outputTax: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    inputTax: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    bankAccountSummary: () => Promise<Record<string, any>>;
+    moneyTransaction: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    bankReconciliation: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    branchProfitAndLoss: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    auditLog: (dateFrom: string, dateTo: string, userId?: string) => Promise<Record<string, any>>;
+    backupHistory: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
+    notification: (dateFrom: string, dateTo: string, branchId?: string) => Promise<Record<string, any>>;
+    userActivity: (dateFrom: string, dateTo: string) => Promise<Record<string, any>>;
   };
   budgets: {
     getAll: () => Promise<Budget[]>;
@@ -316,6 +371,13 @@ export interface IElectronAPI {
     update: (payload: unknown) => Promise<boolean>;
   };
   backup: {
+    createFull: (options?: any) => Promise<any>;
+    validateFile: (filePath: string, password?: string) => Promise<Record<string, any>>;
+    restoreFile: (payload: { filePath: string; password?: string; adminPassword: string }) => Promise<Record<string, any>>;
+    selectBackupFile: () => Promise<string | null>;
+    selectBackupDestination: () => Promise<string | null>;
+    openBackupFolder: (folderPath: string) => Promise<boolean>;
+    getHistory: () => Promise<Array<Record<string, any>>>;
     create: () => Promise<Record<string, any>>;
     list: () => Promise<Array<Record<string, any>>>;
     restore: (filePath: string) => Promise<Record<string, any>>;
@@ -378,6 +440,7 @@ export interface IElectronAPI {
     updateSettings: (settings: any) => Promise<{ success: boolean }>;
     printKhataPayment: (payment: any, isDuplicate?: boolean) => Promise<{ success: boolean; printedOffline?: boolean }>;
     previewKhataPayment: (payment: any, isDuplicate?: boolean) => Promise<string>;
+    previewCustomerStatement: (statement: any) => Promise<string>;
   };
   khata: {
     getCustomers: () => Promise<any[]>;
